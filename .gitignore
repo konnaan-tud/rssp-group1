@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+
+# Project-specific: do NOT commit videos or model checkpoints
+data/*.mp4
+data/*.mov
+data/*.MP4
+data/*.avi
+data/*.mkv
+data/*/        # any subfolders inside data/ (per-participant HD-EPIC dirs)
+!data/README.md
+*.bin
+*.safetensors
+*.pt
+*.pth
+
+# Outputs (logs, model responses) — keep folder, drop contents
+outputs/*
+!outputs/.gitkeep
+
+# Local config / API keys
+.env
+*.local
