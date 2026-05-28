@@ -1,0 +1,14 @@
+{
+  "model": "Qwen/Qwen2.5-VL-3B-Instruct",
+  "video": "data/sample.mp4",
+  "source_video": "data/sample.mp4",
+  "start_sec": null,
+  "duration_sec": null,
+  "prompt_name": "recipe_guess",
+  "prompt_text": "You are watching a video of someone cooking. Based on the actions, ingredients, and tools you observe:\n1. Briefly describe what the person is doing.\n2. List your top three guesses for what recipe is being prepared, in order of likelihood. For each, give a one-line reason.\n3. State which observed details would help confirm or rule out each guess.",
+  "fps": 1.0,
+  "max_pixels": 151200,
+  "max_new_tokens": 512,
+  "elapsed_seconds": 21.73691201210022,
+  "response": "1. The person is preparing a meal by adding ingredients to a pan on the stove.\n\n2. Top three guesses for the recipe:\n   1. Chicken and rice: The presence of rice and chicken pieces suggests this.\n   2. Stir-fry: The use of chopsticks and the pan with food indicates this.\n   3. Pasta: The pan with pasta and the presence of a pasta dish suggest this.\n\n3. Details that would help confirm or rule out each guess:\n   - Chicken and rice: Presence of chicken pieces and rice in the pan.\n   - Stir-fry: Use of chopsticks and the pan with food.\n   - Pasta: Presence of a pasta dish nearby."
+}

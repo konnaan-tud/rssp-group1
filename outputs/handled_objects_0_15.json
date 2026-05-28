@@ -1,0 +1,14 @@
+{
+  "model": "Qwen/Qwen2.5-VL-3B-Instruct",
+  "video": "outputs/sample_clip_0s_15s.mp4",
+  "source_video": "data/sample.mp4",
+  "start_sec": 0.0,
+  "duration_sec": 15.0,
+  "prompt_name": "handled_objects",
+  "prompt_text": "You are watching a short cooking video clip. Focus only on objects that the person touches, picks up, carries, removes, places down, or uses. List every distinct handled object, even if it is visible only briefly. Do not summarize the scene as a story. Do not ignore secondary objects. If you are unsure what an object is, describe its appearance and write 'unclear'.\n\nUse exactly this format:\n- handled_objects:\n  1. object: <name or unclear>\n     action: <picked up / removed / placed / carried / used / unclear>\n     visual_description: <short description of shape/color/location>\n     confidence: <low/medium/high>\n  2. object: <name or unclear>\n     action: <picked up / removed / placed / carried / used / unclear>\n     visual_description: <short description of shape/color/location>\n     confidence: <low/medium/high>\n- missed_or_unclear_objects: [objects that may have been handled but are hard to identify]",
+  "fps": 2.0,
+  "max_pixels": 151200,
+  "max_new_tokens": 180,
+  "elapsed_seconds": 15.574113845825195,
+  "response": "- handled_objects:\n  1. object: refrigerator\n     action: opened\n     visual_description: white refrigerator with various magnets and notes attached\n     confidence: high\n  2. object: container\n     action: picked up\n     visual_description: clear plastic container with red lid\n     confidence: medium\n  3. object: container\n     action: placed in fridge\n     visual_description: clear plastic container with red lid\n     confidence: medium\n  4. object: container\n     action: taken out of fridge\n     visual_description: clear plastic container with red lid\n     confidence: medium\n  5. object: container\n     action: placed on counter\n     visual_description: clear plastic container with red lid\n     confidence: medium\n- missed_or_unclear_objects: [none]"
+}

@@ -12,6 +12,47 @@ PROMPTS = {
         "being prepared yet, only describe what you actually observe."
     ),
 
+    "describe_inna": (
+            "You are watching a short cooking video clip. "
+            "Describe only what is clearly visible in the clip. "
+            "Do not infer hidden ingredients, recipe names, or actions that are not directly shown. "
+            "If an object or ingredient is unclear, say 'unclear' instead of guessing. "
+            "Use at most 5 bullet points. "
+            "Do not repeat the same action."
+    ),
+
+    "evidence_vs_guess": (
+        "Analyze the cooking video clip. Separate what is clearly visible from what is uncertain. "
+        "Do not leave all fields empty unless the video is blank or unreadable. "
+        "Use simple generic descriptions when exact objects are unclear, for example "
+        "'person handling an object', 'person standing near counter', or 'person moving hand'.\n\n"
+        "Use exactly this format:\n"
+        "- direct_visual_evidence: [visible actions or objects, using generic labels if needed]\n"
+        "- uncertain_observations: [things that may be visible but are not clear]\n"
+        "- possible_inferences: [reasonable guesses, marked as guesses]\n"
+        "- do_not_treat_as_fact: [claims that would require guessing]"
+    ),
+
+    "handled_objects": (
+        "You are watching a short cooking video clip. "
+        "Focus only on objects that the person touches, picks up, carries, removes, places down, or uses. "
+        "List every distinct handled object, even if it is visible only briefly. "
+        "Do not summarize the scene as a story. "
+        "Do not ignore secondary objects. "
+        "If you are unsure what an object is, describe its appearance and write 'unclear'.\n\n"
+        "Use exactly this format:\n"
+        "- handled_objects:\n"
+        "  1. object: <name or unclear>\n"
+        "     action: <picked up / removed / placed / carried / used / unclear>\n"
+        "     visual_description: <short description of shape/color/location>\n"
+        "     confidence: <low/medium/high>\n"
+        "  2. object: <name or unclear>\n"
+        "     action: <picked up / removed / placed / carried / used / unclear>\n"
+        "     visual_description: <short description of shape/color/location>\n"
+        "     confidence: <low/medium/high>\n"
+        "- missed_or_unclear_objects: [objects that may have been handled but are hard to identify]"
+    ),
+
     "recipe_guess": (
         "You are watching a video of someone cooking. Based on the actions, "
         "ingredients, and tools you observe:\n"

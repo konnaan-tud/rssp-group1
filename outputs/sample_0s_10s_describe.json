@@ -1,0 +1,14 @@
+{
+  "model": "Qwen/Qwen2.5-VL-3B-Instruct",
+  "video": "outputs/sample_clip_0s_10s.mp4",
+  "source_video": "data/sample.mp4",
+  "start_sec": 0.0,
+  "duration_sec": 10.0,
+  "prompt_name": "describe",
+  "prompt_text": "You are watching a video of someone cooking. Describe in detail what the person is doing in this video clip \u2014 the actions, objects, ingredients, and tools that are visible. Do not guess what recipe is being prepared yet, only describe what you actually observe.",
+  "fps": 2.0,
+  "max_pixels": 151200,
+  "max_new_tokens": 120,
+  "elapsed_seconds": 7.345110893249512,
+  "response": "The video starts with a view of a kitchen from behind an open refrigerator door. The camera then pans to the right, revealing a cluttered kitchen counter with various items on it. A person wearing a floral shirt opens the refrigerator door and reaches inside. They take out a container from the freezer section and place it on the counter."
+}

@@ -1,0 +1,14 @@
+{
+  "model": "Qwen/Qwen2.5-VL-3B-Instruct",
+  "video": "outputs/sample_clip_0s_15s.mp4",
+  "source_video": "data/sample.mp4",
+  "start_sec": 0.0,
+  "duration_sec": 15.0,
+  "prompt_name": "evidence_vs_guess",
+  "prompt_text": "Analyze the cooking video clip. Separate what is clearly visible from what is uncertain. Do not leave all fields empty unless the video is blank or unreadable. Use simple generic descriptions when exact objects are unclear, for example 'person handling an object', 'person standing near counter', or 'person moving hand'.\n\nUse exactly this format:\n- direct_visual_evidence: [visible actions or objects, using generic labels if needed]\n- uncertain_observations: [things that may be visible but are not clear]\n- possible_inferences: [reasonable guesses, marked as guesses]\n- do_not_treat_as_fact: [claims that would require guessing]",
+  "fps": 2.0,
+  "max_pixels": 151200,
+  "max_new_tokens": 180,
+  "elapsed_seconds": 9.915510654449463,
+  "response": "- direct_visual_evidence: A person opens a refrigerator door and reaches inside to grab a container of food.\n- uncertain_observations: The kitchen appears cluttered with various items on the countertops and shelves.\n- possible_inferences: The person is likely preparing a meal or snack.\n- do_not_treat_as_fact: The person is wearing a floral shirt."
+}

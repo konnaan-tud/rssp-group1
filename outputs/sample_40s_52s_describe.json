@@ -1,0 +1,14 @@
+{
+  "model": "Qwen/Qwen2.5-VL-3B-Instruct",
+  "video": "outputs/sample_clip_40s_52s.mp4",
+  "source_video": "data/sample.mp4",
+  "start_sec": 40.0,
+  "duration_sec": 52.0,
+  "prompt_name": "describe",
+  "prompt_text": "You are watching a video of someone cooking. Describe in detail what the person is doing in this video clip \u2014 the actions, objects, ingredients, and tools that are visible. Do not guess what recipe is being prepared yet, only describe what you actually observe.",
+  "fps": 2.0,
+  "max_pixels": 151200,
+  "max_new_tokens": 120,
+  "elapsed_seconds": 7.558048963546753,
+  "response": "A person is standing at a kitchen counter, preparing food. They are holding a bottle of oil and pouring it into a pan on the stove. The camera then pans to show the person cutting vegetables on a cutting board. The person then picks up a bowl and begins mixing its contents with a spoon."
+}

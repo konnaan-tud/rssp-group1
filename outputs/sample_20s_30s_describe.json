@@ -1,0 +1,14 @@
+{
+  "model": "Qwen/Qwen2.5-VL-3B-Instruct",
+  "video": "outputs/sample_clip_20s_30s.mp4",
+  "source_video": "data/sample.mp4",
+  "start_sec": 20.0,
+  "duration_sec": 30.0,
+  "prompt_name": "describe",
+  "prompt_text": "You are watching a video of someone cooking. Describe in detail what the person is doing in this video clip \u2014 the actions, objects, ingredients, and tools that are visible. Do not guess what recipe is being prepared yet, only describe what you actually observe.",
+  "fps": 2.0,
+  "max_pixels": 151200,
+  "max_new_tokens": 120,
+  "elapsed_seconds": 19.80737805366516,
+  "response": "A person is cooking in a kitchen with white tiled walls. They are using a frying pan on a gas stove to cook onions. The person is wearing a black shirt with a floral pattern and has a bracelet on their wrist. They are stirring the onions with a spatula. There is a plate with an egg on it next to the stove. The person then picks up the frying pan and places it on a different burner on the stove."
+}

@@ -1,0 +1,14 @@
+{
+  "model": "Qwen/Qwen2.5-VL-3B-Instruct",
+  "video": "outputs/sample_clip_40s_52s.mp4",
+  "source_video": "data/sample.mp4",
+  "start_sec": 40.0,
+  "duration_sec": 52.0,
+  "prompt_name": "describe_inna",
+  "prompt_text": "You are watching a short cooking video clip. Describe only what is clearly visible in the clip. Do not infer hidden ingredients, recipe names, or actions that are not directly shown. If an object or ingredient is unclear, say 'unclear' instead of guessing. Use at most 5 bullet points. Do not repeat the same action.",
+  "fps": 2.0,
+  "max_pixels": 151200,
+  "max_new_tokens": 120,
+  "elapsed_seconds": 8.1966552734375,
+  "response": "- A person is cooking in a kitchen.\n- They are using a pan on the stove and stirring something with a spoon.\n- The kitchen has white tiled walls and various items on the counter, including a bag labeled \"Fibrous.\"\n- There is a microwave and other kitchen appliances visible.\n- The person is wearing a pink shirt and appears to be focused on cooking."
+}
