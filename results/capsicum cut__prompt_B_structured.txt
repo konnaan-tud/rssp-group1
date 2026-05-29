@@ -1,0 +1,26 @@
+Clip: capsicum cut
+Prompt: prompt_B_structured
+Time: 14.5s
+============================================================
+```json
+{
+  "summary": "The person continues slicing the red bell pepper into thin strips.",
+  "actions": [
+    "slicing"
+  ],
+  "ingredients": [
+    "red bell pepper"
+  ],
+  "tools": [
+    "knife",
+    "cutting board"
+  ],
+  "object_states": {
+    "red bell pepper": "being sliced"
+  },
+  "temporal_sequence": [
+    "The person holds the red bell pepper steady while slicing it.",
+    "The knife moves back and forth, creating thin strips of the pepper."
+  ]
+}
+```

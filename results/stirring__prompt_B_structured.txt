@@ -1,0 +1,30 @@
+Clip: stirring
+Prompt: prompt_B_structured
+Time: 57.9s
+============================================================
+```json
+{
+  "summary": "The person is stirring and mixing vegetables with meat in a wok on a stove.",
+  "actions": [
+    "stirring",
+    "mixing"
+  ],
+  "ingredients": [
+    "vegetables",
+    "meat"
+  ],
+  "tools": [
+    "wok",
+    "spatula",
+    "stove"
+  ],
+  "object_states": {
+    "vegetables": "being mixed with meat",
+    "meat": "being cooked and stirred in the wok"
+  },
+  "temporal_sequence": [
+    "The person starts by stirring the vegetables and meat together.",
+    "They continue to mix the ingredients, ensuring they are evenly distributed."
+  ]
+}
+```

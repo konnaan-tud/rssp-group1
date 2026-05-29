@@ -1,0 +1,27 @@
+Clip: tomato cut
+Prompt: prompt_B_structured
+Time: 11.0s
+============================================================
+```json
+{
+  "summary": "A person is slicing tomatoes on a cutting board with a knife.",
+  "actions": [
+    "slicing",
+    "moving tomato pieces"
+  ],
+  "ingredients": [
+    "tomato"
+  ],
+  "tools": [
+    "knife"
+  ],
+  "object_states": {
+    "tomato": "being sliced",
+    "knife": "in use"
+  },
+  "temporal_sequence": [
+    "The person starts slicing the tomato.",
+    "The knife moves back and forth, cutting through the tomato."
+  ]
+}
+```
