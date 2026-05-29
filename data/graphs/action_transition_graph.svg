@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="520">
+<defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#555"/></marker></defs>
+<rect width="100%" height="100%" fill="white"/>
+<text x="50%" y="30" text-anchor="middle" font-size="22" font-family="Arial">Common sequential action transitions</text>
+<text x="250" y="55" text-anchor="middle" font-size="14" font-family="Arial">earlier action</text>
+<text x="650" y="55" text-anchor="middle" font-size="14" font-family="Arial">next action</text>
+<line x1="310" y1="80" x2="590" y2="80" stroke="#666" stroke-width="6.0" marker-end="url(#arrow)" opacity="0.75"/>
+<text x="450.0" y="76.0" text-anchor="middle" font-size="11" font-family="Arial">4</text>
+<line x1="310" y1="114" x2="590" y2="114" stroke="#666" stroke-width="4.8" marker-end="url(#arrow)" opacity="0.75"/>
+<text x="450.0" y="110.0" text-anchor="middle" font-size="11" font-family="Arial">3</text>
+<line x1="310" y1="148" x2="590" y2="148" stroke="#666" stroke-width="4.8" marker-end="url(#arrow)" opacity="0.75"/>
+<text x="450.0" y="144.0" text-anchor="middle" font-size="11" font-family="Arial">3</text>
+<line x1="310" y1="182" x2="590" y2="182" stroke="#666" stroke-width="4.8" marker-end="url(#arrow)" opacity="0.75"/>
+<text x="450.0" y="178.0" text-anchor="middle" font-size="11" font-family="Arial">3</text>
+<line x1="310" y1="216" x2="590" y2="216" stroke="#666" stroke-width="3.5" marker-end="url(#arrow)" opacity="0.75"/>
+<text x="450.0" y="212.0" text-anchor="middle" font-size="11" font-family="Arial">2</text>
+<line x1="310" y1="250" x2="590" y2="114" stroke="#666" stroke-width="3.5" marker-end="url(#arrow)" opacity="0.75"/>
+<text x="450.0" y="178.0" text-anchor="middle" font-size="11" font-family="Arial">2</text>
+<line x1="310" y1="284" x2="590" y2="250" stroke="#666" stroke-width="3.5" marker-end="url(#arrow)" opacity="0.75"/>
+<text x="450.0" y="263.0" text-anchor="middle" font-size="11" font-family="Arial">2</text>
+<line x1="310" y1="318" x2="590" y2="284" stroke="#666" stroke-width="3.5" marker-end="url(#arrow)" opacity="0.75"/>
+<text x="450.0" y="297.0" text-anchor="middle" font-size="11" font-family="Arial">2</text>
+<line x1="310" y1="284" x2="590" y2="318" stroke="#666" stroke-width="3.5" marker-end="url(#arrow)" opacity="0.75"/>
+<text x="450.0" y="297.0" text-anchor="middle" font-size="11" font-family="Arial">2</text>
+<line x1="310" y1="352" x2="590" y2="114" stroke="#666" stroke-width="3.5" marker-end="url(#arrow)" opacity="0.75"/>
+<text x="450.0" y="229.0" text-anchor="middle" font-size="11" font-family="Arial">2</text>
+<line x1="310" y1="386" x2="590" y2="148" stroke="#666" stroke-width="3.5" marker-end="url(#arrow)" opacity="0.75"/>
+<text x="450.0" y="263.0" text-anchor="middle" font-size="11" font-family="Arial">2</text>
+<line x1="310" y1="420" x2="590" y2="114" stroke="#666" stroke-width="3.5" marker-end="url(#arrow)" opacity="0.75"/>
+<text x="450.0" y="263.0" text-anchor="middle" font-size="11" font-family="Arial">2</text>
+<line x1="310" y1="454" x2="590" y2="352" stroke="#666" stroke-width="3.5" marker-end="url(#arrow)" opacity="0.75"/>
+<text x="450.0" y="399.0" text-anchor="middle" font-size="11" font-family="Arial">2</text>
+<line x1="310" y1="318" x2="590" y2="386" stroke="#666" stroke-width="3.5" marker-end="url(#arrow)" opacity="0.75"/>
+<text x="450.0" y="348.0" text-anchor="middle" font-size="11" font-family="Arial">2</text>
+<line x1="310" y1="420" x2="590" y2="386" stroke="#666" stroke-width="3.5" marker-end="url(#arrow)" opacity="0.75"/>
+<text x="450.0" y="399.0" text-anchor="middle" font-size="11" font-family="Arial">2</text>
+<line x1="310" y1="420" x2="590" y2="420" stroke="#666" stroke-width="3.5" marker-end="url(#arrow)" opacity="0.75"/>
+<text x="450.0" y="416.0" text-anchor="middle" font-size="11" font-family="Arial">2</text>
+<line x1="310" y1="420" x2="590" y2="284" stroke="#666" stroke-width="3.5" marker-end="url(#arrow)" opacity="0.75"/>
+<text x="450.0" y="348.0" text-anchor="middle" font-size="11" font-family="Arial">2</text>
+<line x1="310" y1="488" x2="590" y2="454" stroke="#666" stroke-width="2.2" marker-end="url(#arrow)" opacity="0.75"/>
+<text x="450.0" y="467.0" text-anchor="middle" font-size="11" font-family="Arial">1</text>
+<rect x="180" y="66" width="140" height="26" rx="5" fill="#EEEEEE" stroke="#555"/>
+<text x="250" y="85" text-anchor="middle" font-size="13" font-family="Arial">whisk (7)</text>
+<rect x="180" y="100" width="140" height="26" rx="5" fill="#EEEEEE" stroke="#555"/>
+<text x="250" y="119" text-anchor="middle" font-size="13" font-family="Arial">coat (7)</text>
+<rect x="180" y="134" width="140" height="26" rx="5" fill="#EEEEEE" stroke="#555"/>
+<text x="250" y="153" text-anchor="middle" font-size="13" font-family="Arial">boil (9)</text>
+<rect x="180" y="168" width="140" height="26" rx="5" fill="#EEEEEE" stroke="#555"/>
+<text x="250" y="187" text-anchor="middle" font-size="13" font-family="Arial">season (6)</text>
+<rect x="180" y="202" width="140" height="26" rx="5" fill="#EEEEEE" stroke="#555"/>
+<text x="250" y="221" text-anchor="middle" font-size="13" font-family="Arial">mix (6)</text>
+<rect x="180" y="236" width="140" height="26" rx="5" fill="#EEEEEE" stroke="#555"/>
+<text x="250" y="255" text-anchor="middle" font-size="13" font-family="Arial">add (8)</text>
+<rect x="180" y="270" width="140" height="26" rx="5" fill="#EEEEEE" stroke="#555"/>
+<text x="250" y="289" text-anchor="middle" font-size="13" font-family="Arial">toss (7)</text>
+<rect x="180" y="304" width="140" height="26" rx="5" fill="#EEEEEE" stroke="#555"/>
+<text x="250" y="323" text-anchor="middle" font-size="13" font-family="Arial">step (11)</text>
+<rect x="180" y="338" width="140" height="26" rx="5" fill="#EEEEEE" stroke="#555"/>
+<text x="250" y="357" text-anchor="middle" font-size="13" font-family="Arial">place (5)</text>
+<rect x="180" y="372" width="140" height="26" rx="5" fill="#EEEEEE" stroke="#555"/>
+<text x="250" y="391" text-anchor="middle" font-size="13" font-family="Arial">cover (14)</text>
+<rect x="180" y="406" width="140" height="26" rx="5" fill="#EEEEEE" stroke="#555"/>
+<text x="250" y="425" text-anchor="middle" font-size="13" font-family="Arial">combine (14)</text>
+<rect x="180" y="440" width="140" height="26" rx="5" fill="#EEEEEE" stroke="#555"/>
+<text x="250" y="459" text-anchor="middle" font-size="13" font-family="Arial">drain (9)</text>
+<rect x="180" y="474" width="140" height="26" rx="5" fill="#EEEEEE" stroke="#555"/>
+<text x="250" y="493" text-anchor="middle" font-size="13" font-family="Arial">stir (5)</text>
+<rect x="580" y="66" width="140" height="26" rx="5" fill="#EEEEEE" stroke="#555"/>
+<text x="650" y="85" text-anchor="middle" font-size="13" font-family="Arial">coat (7)</text>
+<rect x="580" y="100" width="140" height="26" rx="5" fill="#EEEEEE" stroke="#555"/>
+<text x="650" y="119" text-anchor="middle" font-size="13" font-family="Arial">cover (14)</text>
+<rect x="580" y="134" width="140" height="26" rx="5" fill="#EEEEEE" stroke="#555"/>
+<text x="650" y="153" text-anchor="middle" font-size="13" font-family="Arial">drain (9)</text>
+<rect x="580" y="168" width="140" height="26" rx="5" fill="#EEEEEE" stroke="#555"/>
+<text x="650" y="187" text-anchor="middle" font-size="13" font-family="Arial">chill (5)</text>
+<rect x="580" y="202" width="140" height="26" rx="5" fill="#EEEEEE" stroke="#555"/>
+<text x="650" y="221" text-anchor="middle" font-size="13" font-family="Arial">add (8)</text>
+<rect x="580" y="236" width="140" height="26" rx="5" fill="#EEEEEE" stroke="#555"/>
+<text x="650" y="255" text-anchor="middle" font-size="13" font-family="Arial">step (11)</text>
+<rect x="580" y="270" width="140" height="26" rx="5" fill="#EEEEEE" stroke="#555"/>
+<text x="650" y="289" text-anchor="middle" font-size="13" font-family="Arial">boil (9)</text>
+<rect x="580" y="304" width="140" height="26" rx="5" fill="#EEEEEE" stroke="#555"/>
+<text x="650" y="323" text-anchor="middle" font-size="13" font-family="Arial">season (6)</text>
+<rect x="580" y="338" width="140" height="26" rx="5" fill="#EEEEEE" stroke="#555"/>
+<text x="650" y="357" text-anchor="middle" font-size="13" font-family="Arial">stir (5)</text>
+<rect x="580" y="372" width="140" height="26" rx="5" fill="#EEEEEE" stroke="#555"/>
+<text x="650" y="391" text-anchor="middle" font-size="13" font-family="Arial">whisk (7)</text>
+<rect x="580" y="406" width="140" height="26" rx="5" fill="#EEEEEE" stroke="#555"/>
+<text x="650" y="425" text-anchor="middle" font-size="13" font-family="Arial">mix (6)</text>
+<rect x="580" y="440" width="140" height="26" rx="5" fill="#EEEEEE" stroke="#555"/>
+<text x="650" y="459" text-anchor="middle" font-size="13" font-family="Arial">refrigerate (3)</text>
+</svg>
