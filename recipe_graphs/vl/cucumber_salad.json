@@ -1,0 +1,109 @@
+{
+  "name": "cucumber salad",
+  "category": "labor day",
+  "all_ingredients": [
+    "cucumber",
+    "onion",
+    "white vinegar",
+    "white sugar",
+    "water",
+    "dill"
+  ],
+  "stages": [
+    {
+      "stage_id": 1,
+      "name": "gather ingredients and prepare",
+      "steps": [
+        {
+          "step_id": "s1_1",
+          "actions": [
+            "gather ingredients"
+          ],
+          "ingredients": [
+            "cucumber",
+            "onion",
+            "white vinegar",
+            "white sugar",
+            "water",
+            "dill"
+          ],
+          "object_states": {}
+        }
+      ]
+    },
+    {
+      "stage_id": 2,
+      "name": "toss cucumbers and onions",
+      "steps": [
+        {
+          "step_id": "s2_1",
+          "actions": [
+            "toss sliced cucumbers and onion together"
+          ],
+          "ingredients": [
+            "cucumber",
+            "onion"
+          ],
+          "object_states": {
+            "cucumber": "sliced",
+            "onion": "sliced"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 3,
+      "name": "make dressing",
+      "steps": [
+        {
+          "step_id": "s3_1",
+          "actions": [
+            "combine vinegar, sugar, and water in a saucepan over medium-high heat; bring to a boil"
+          ],
+          "ingredients": [
+            "white vinegar",
+            "white sugar",
+            "water"
+          ],
+          "object_states": {
+            "vinegar": "boiled",
+            "sugar": "boiled",
+            "water": "boiled"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 4,
+      "name": "pour dressing over salad",
+      "steps": [
+        {
+          "step_id": "s4_1",
+          "actions": [
+            "pour boiling mixture over cucumbers and onions in the bowl"
+          ],
+          "ingredients": [],
+          "object_states": {}
+        }
+      ]
+    },
+    {
+      "stage_id": 5,
+      "name": "stir in dill and marinate",
+      "steps": [
+        {
+          "step_id": "s5_1",
+          "actions": [
+            "stir in dill; cover and let marinate in the refrigerator for at least 1 hour"
+          ],
+          "ingredients": [
+            "dill"
+          ],
+          "object_states": {
+            "dill": "mixed"
+          }
+        }
+      ]
+    }
+  ]
+}

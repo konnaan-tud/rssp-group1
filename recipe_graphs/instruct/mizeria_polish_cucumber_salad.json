@@ -1,0 +1,124 @@
+{
+  "name": "mizeria",
+  "category": "christmas",
+  "all_ingredients": [
+    "cucumber",
+    "salt",
+    "dill",
+    "sour cream",
+    "lemon juice",
+    "white sugar",
+    "black pepper"
+  ],
+  "stages": [
+    {
+      "stage_id": 1,
+      "name": "prep cucumbers and dill",
+      "steps": [
+        {
+          "step_id": "s1_1",
+          "actions": [
+            "sprinkle salt",
+            "let stand"
+          ],
+          "ingredients": [
+            "cucumber",
+            "salt"
+          ],
+          "object_states": {
+            "cucumber": "soft"
+          }
+        },
+        {
+          "step_id": "s1_2",
+          "actions": [
+            "squeeze liquid",
+            "transfer to bowl"
+          ],
+          "ingredients": [
+            "cucumber",
+            "dill"
+          ],
+          "object_states": {
+            "cucumber": "dry",
+            "dill": "in bowl"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 2,
+      "name": "make dressing",
+      "steps": [
+        {
+          "step_id": "s2_1",
+          "actions": [
+            "mix sour cream",
+            "add lemon juice"
+          ],
+          "ingredients": [
+            "sour cream",
+            "lemon juice"
+          ],
+          "object_states": {
+            "dressing": "mixed"
+          }
+        },
+        {
+          "step_id": "s2_2",
+          "actions": [
+            "add sugar to dressing"
+          ],
+          "ingredients": [
+            "white sugar",
+            "dressing"
+          ],
+          "object_states": {
+            "dressing": "sweetened"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 3,
+      "name": "combine and finish",
+      "steps": [
+        {
+          "step_id": "s3_1",
+          "actions": [
+            "add dressing to cucumbers",
+            "toss"
+          ],
+          "ingredients": [
+            "dressing",
+            "cucumber"
+          ],
+          "object_states": {
+            "salad": "mixed"
+          }
+        },
+        {
+          "step_id": "s3_2",
+          "actions": [
+            "season with pepper"
+          ],
+          "ingredients": [
+            "black pepper",
+            "salad"
+          ],
+          "object_states": {
+            "salad": "spiced"
+          }
+        },
+        {
+          "step_id": "s3_3",
+          "actions": [
+            "cover and chill"
+          ],
+          "ingredients": [],
+          "object_states": {}
+        }
+      ]
+    }
+  ]
+}

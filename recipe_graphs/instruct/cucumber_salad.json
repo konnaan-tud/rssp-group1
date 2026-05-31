@@ -1,0 +1,101 @@
+{
+  "name": "cucumber salad",
+  "category": "labor day",
+  "all_ingredients": [
+    "cucumber",
+    "onion",
+    "white vinegar",
+    "white sugar",
+    "water",
+    "dill"
+  ],
+  "stages": [
+    {
+      "stage_id": 1,
+      "name": "prep ingredients",
+      "steps": [
+        {
+          "step_id": "s1_1",
+          "actions": [
+            "slice cucumbers",
+            "chop onion"
+          ],
+          "ingredients": [
+            "cucumber",
+            "onion"
+          ],
+          "object_states": {
+            "cucumber": "sliced",
+            "onion": "chopped"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 2,
+      "name": "make dressing",
+      "steps": [
+        {
+          "step_id": "s2_1",
+          "actions": [
+            "boil vinegar, sugar, water"
+          ],
+          "ingredients": [
+            "white vinegar",
+            "white sugar",
+            "water"
+          ],
+          "object_states": {
+            "mixture": "boiling"
+          }
+        },
+        {
+          "step_id": "s2_2",
+          "actions": [
+            "pour dressing over vegetables"
+          ],
+          "ingredients": [
+            "mixture",
+            "cucumber",
+            "onion"
+          ],
+          "object_states": {
+            "vegetables": "dressed with vinegar mixture"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 3,
+      "name": "finish and chill",
+      "steps": [
+        {
+          "step_id": "s3_1",
+          "actions": [
+            "stir in dill",
+            "cover bowl"
+          ],
+          "ingredients": [
+            "dill",
+            "cucumber salad"
+          ],
+          "object_states": {
+            "cucumber salad": "covered"
+          }
+        },
+        {
+          "step_id": "s3_2",
+          "actions": [
+            "refrigerate for 1 hour"
+          ],
+          "ingredients": [
+            "cucumber salad"
+          ],
+          "object_states": {
+            "cucumber salad": "chilled and marinated"
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,103 @@
+{
+  "name": "mom_s_marinated_cucumbers",
+  "category": "kosher",
+  "all_ingredients": [
+    "cucumber",
+    "salt",
+    "white sugar",
+    "distilled white vinegar",
+    "onion",
+    "water",
+    "celery seed"
+  ],
+  "stages": [
+    {
+      "stage_id": 1,
+      "name": "prep cucumbers and mix dressing",
+      "steps": [
+        {
+          "step_id": "s1_1",
+          "actions": [
+            "slice cucumbers",
+            "sprinkle with salt"
+          ],
+          "ingredients": [
+            "cucumber",
+            "salt"
+          ],
+          "object_states": {
+            "cucumber": "sliced and salty"
+          }
+        },
+        {
+          "step_id": "s1_2",
+          "actions": [
+            "mix sugar, vinegar, onion, water, celery seed"
+          ],
+          "ingredients": [
+            "white sugar",
+            "distilled white vinegar",
+            "onion",
+            "water",
+            "celery seed"
+          ],
+          "object_states": {
+            "dressing": "mixed"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 2,
+      "name": "release moisture and combine",
+      "steps": [
+        {
+          "step_id": "s2_1",
+          "actions": [
+            "squeeze cucumbers"
+          ],
+          "ingredients": [
+            "cucumber",
+            "salt"
+          ],
+          "object_states": {
+            "cucumber": "moisture released"
+          }
+        },
+        {
+          "step_id": "s2_2",
+          "actions": [
+            "add cucumbers to dressing",
+            "stir until coated"
+          ],
+          "ingredients": [
+            "cucumber",
+            "dressing"
+          ],
+          "object_states": {
+            "cucumbers": "coated with dressing"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 3,
+      "name": "finish and refrigerate",
+      "steps": [
+        {
+          "step_id": "s3_1",
+          "actions": [
+            "cover and refrigerate"
+          ],
+          "ingredients": [
+            "cucumbers",
+            "dressing"
+          ],
+          "object_states": {
+            "cucumbers": "cooled and marinated"
+          }
+        }
+      ]
+    }
+  ]
+}
