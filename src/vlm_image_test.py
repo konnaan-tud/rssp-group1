@@ -5,7 +5,7 @@ import torch
 from PIL import Image
 from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
 
-MODEL = "Qwen/Qwen2.5-VL-3B-Instruct"
+MODEL = "Qwen/Qwen2.5-VL-7B-Instruct"
 IMAGE_PATH = sys.argv[1] if len(sys.argv) > 1 else "data/frame.jpg"
 PROMPT = "Describe what is happening in this image. Is the person cooking?"
 

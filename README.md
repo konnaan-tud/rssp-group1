@@ -1,83 +1,126 @@
 # Project 1 — Cooking Intent Recognition with VLM Clarification
 
-Baseline pipeline for a VLM-based cooking observer that watches a human prepare
-a meal and infers the recipe being prepared. This repository hosts the initial
-infrastructure; the methodology, comparison of clarification question forms,
-and full evaluation are described in the project proposal.
+A VLM-based cooking observer that watches a human prepare a meal, infers the
+recipe being prepared from a finite set of candidates, and (eventually) asks
+clarification questions when its belief is uncertain. This repository hosts the
+working pipeline; the methodology and evaluation are described in the proposal.
 
-## What this repo does (so far)
+## What the pipeline does
 
-A minimal pipeline that:
+1. A short video clip is fed to **Qwen2.5-VL** (7B for experiments, 3B for
+   laptop development).
+2. The VLM emits one structured **observation per clip**: a verb, an
+   object target, the visible ingredients and tools, and the observed states
+   of objects.
+3. Observations are appended to an **`ObservationHistory`** — an append-only
+   list. The next window's prompt receives a short summary of earlier
+   observations, so the VLM has context for what has already happened.
+4. From this history we derive the current state of the kitchen on read
+   (union of ingredients seen, latest state per object, action sequence so
+   far). This will feed the upcoming recipe-belief module that scores the
+   history against the static recipe graphs in `recipe_graphs/`.
 
-1. Takes a cooking video (e.g. a clip from the HD-EPIC dataset).
-2. Optionally extracts a short clip from a longer video at a given start time.
-3. Passes the clip to **Qwen2.5-VL-7B-Instruct**.
-4. Asks the VLM what is happening and what recipe might be being prepared.
-5. Writes the model's response to `outputs/`.
+The system is intentionally append-only — earlier observations are never
+overwritten — so we keep a faithful audit trail per session.
 
-This is **only the perception baseline**. The clarification loop, the
-recipe-belief module, and the experimental comparison are not yet implemented.
+## Repository layout
+
+```
+rssp-group1/
+├── dataset.csv                    Recipes selected for high overlap (peer)
+├── generate_graphs_instruct.py    Static recipe-graph generation via LM Studio (peer)
+├── generate_graphs_vl.py          Variant of the above (peer)
+├── extract_frames.py              Frame-based video preprocessing (peer)
+├── vlm_probe.py                   Frame-based VLM probe via LM Studio (peer)
+├── recipe_graphs/
+│   ├── instruct/                  Hand-curated static recipe graphs (peer)
+│   └── vl/                        VL-prompted variants (peer)
+├── src/
+│   ├── dynamic_graph.py           NEW · per-window observation records + prompts
+│   ├── run_dynamic_loop.py        NEW · run the observation loop across a list of clips
+│   ├── vlm_baseline.py            Earlier whole-video baseline
+│   ├── vlm_image_test.py          Minimal single-image sanity check
+│   ├── prompts.py                 Prompt templates for the baseline
+│   └── video_utils.py             Clip extraction helpers
+├── data/                          Videos go here (git-ignored)
+├── outputs/                       Pipeline outputs (git-ignored)
+└── results/                       Earlier results (peer)
+```
+
+## Files added or substantially changed in this branch
+
+| File | Status | Purpose |
+|---|---|---|
+| `src/dynamic_graph.py` | **new** | Defines `WindowObservation` (one structured record per clip) and `ObservationHistory` (append-only list across clips). Includes the prompt builder, the VLM-response parser, and a self-contained smoke test. |
+| `src/run_dynamic_loop.py` | **new** | Driver that runs the observation loop end-to-end: loads Qwen2.5-VL, processes each clip in order, appends to the history, prints and logs per-window results. |
+| `src/vlm_baseline.py` | adjusted | Default model switched to `Qwen2.5-VL-3B-Instruct` and load path simplified to use MPS / CUDA / CPU explicitly (no `device_map="auto"`). |
+| `src/vlm_image_test.py` | new | Minimum-viable image-only test (no video pipeline). Useful for verifying the model loads and produces output before debugging the video path. |
+| `requirements.txt` | adjusted | Trimmed to the minimum for Mac / Linux: no `bitsandbytes`, no `decord`. |
 
 ## Setup
 
 ```bash
-# 1. Clone
 git clone <repo-url>
-cd project1-cooking-intent
+cd rssp-group1
 
-# 2. Python environment (Python 3.10+ recommended)
+# Python 3.10+ recommended (3.9 works but yt-dlp & some hints are deprecated)
 python -m venv .venv
-source .venv/bin/activate    # on Windows: .venv\Scripts\activate
+source .venv/bin/activate
 
-# 3. Install dependencies
+pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### Hardware notes
+Hardware notes:
 
-- The 7B model is roughly 16 GB in `bfloat16`. A single GPU with **≥ 24 GB
-  VRAM** runs it comfortably. A 16 GB GPU will fit it in 8-bit, see
-  `requirements.txt`.
-- CPU inference is not practical for the 7B model. For laptop development we
-  recommend swapping to **`Qwen/Qwen2.5-VL-3B-Instruct`** (change the model
-  name in `src/vlm_baseline.py`).
+- **CUDA GPU with ≥ 24 GB VRAM** runs the 7B model comfortably.
+- **Apple Silicon (M2 Pro and up, 24 GB unified memory)** runs the 3B model
+  on MPS; the 7B works but is slow. Set the env var
+  `PYTORCH_ENABLE_MPS_FALLBACK=1` before launching to silence MPS-unsupported
+  op errors.
 
-### Data
+Videos are not committed. Put them in `data/`.
 
-HD-EPIC videos are large and licensed for research use only. They are **not**
-committed to the repo. Put any video files you want to run the baseline on
-into `data/`. See `data/README.md` for the expected naming convention.
-
-## Running the baseline
+## Running the per-window observation loop
 
 ```bash
-# Whole-video mode (only for short clips)
-python -m src.vlm_baseline \
-    --video data/sample.mp4 \
-    --prompt-name describe \
-    --output outputs/sample_describe.json
-
-# Clip-window mode (for long HD-EPIC videos)
-python -m src.vlm_baseline \
-    --video data/p01.mp4 \
-    --start-sec 60 --duration-sec 15 \
-    --prompt-name recipe_guess \
-    --output outputs/p01_clip_recipe.json
+PYTORCH_ENABLE_MPS_FALLBACK=1 python -m src.run_dynamic_loop \
+    --clips data/chopping_onions.mp4 \
+            data/cooking_onions.mp4 \
+            data/cooking_minced_meat.mp4 \
+    --recipe "Spaghetti bolognese early steps" \
+    --fps 0.5
 ```
 
-Available prompts live in `src/prompts.py`. The two starter prompts are:
+For each clip the driver prints the VLM's raw response, the parsed
+observation, and the history after this window. Per-window JSON logs are
+written to `outputs/dynamic_loop/window_NN.json`. The final accumulated
+history is written to `outputs/dynamic_loop/final_history.json`.
 
-- `describe` — open-ended description of what is happening
-- `recipe_guess` — asks the VLM for its top three recipe candidates
+To verify the observation logic without loading the model, run the smoke test:
 
-## Next steps (tracked in issues)
+```bash
+python src/dynamic_graph.py
+```
 
-- [ ] Probabilistic belief module over a finite set of candidate recipes
-- [ ] Hand-curated static scene graphs for ~5 recipes
-- [ ] Entropy-based trigger for asking
-- [ ] Two clarification-prompt templates (open wh / polar restricted-offer)
-- [ ] Evaluation script: information gain per clarification turn
+This applies three hand-written VLM responses to an `ObservationHistory` and
+prints the resulting structure plus the prompt that would be sent next.
 
-## Citing
+## Other entry points (older / simpler)
 
-Once the proposal is finalised, see `CITATION.cff` (TBD) for the formal cite.
+- `src/vlm_baseline.py` — single VLM call over a whole video, with one
+  free-form prompt. Predates the observation-loop design; useful for one-off
+  sanity checks.
+- `src/vlm_image_test.py` — minimum-viable image call, for verifying the
+  model is loaded and producing output before involving the video pipeline.
+
+## Next steps
+
+- Score the accumulated `ObservationHistory` against each static recipe
+  graph in `recipe_graphs/instruct/` to produce a probability distribution
+  over candidate recipes.
+- Entropy-based trigger that fires a clarification question when the belief
+  is too uncertain.
+- Two clarification-prompt templates (open wh vs polar restricted-offer)
+  for the form-of-question comparison described in the proposal.
+- Evaluation script that computes information gain per clarification turn.
