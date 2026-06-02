@@ -23,6 +23,75 @@ working pipeline; the methodology and evaluation are described in the proposal.
 The system is intentionally append-only — earlier observations are never
 overwritten — so we keep a faithful audit trail per session.
 
+## Prompt scalability fix
+
+The scalability issue was in prompt generation, not in
+`ObservationHistory`. Originally, `build_prompt()` replayed every past
+observation into each new VLM call, so the prompt kept growing as the session
+got longer.
+
+I kept the append-only history exactly as it was and changed only how that
+history is rendered for prompting. In `src/dynamic_graph.py` I added
+`ObservationHistory.compact_context(recent_windows=5)` and updated
+`build_prompt()` to use it.
+
+The compact context includes:
+
+- kitchen state from `ingredients_seen()`, `tools_seen()`, and `latest_states()`
+- recent actions only
+- the last few observations only
+
+This keeps the full history intact for logging, debugging, and future
+recipe-belief inference, while keeping the prompt much more stable over long
+videos.
+
+Before, the history section looked like this:
+
+```text
+window 1: verb=chop, target=onion, ingredients=[onion], tools=[knife, cutting board]
+window 2: verb=saute, target=onion, ingredients=[onion, oil], tools=[pan, spatula]
+window 3: verb=add, target=minced meat, ingredients=[minced meat], tools=[pan]
+...
+```
+
+After, it looks more like this:
+
+```text
+Kitchen state:
+* ingredients_seen: onion, oil, minced meat, salt, tomato sauce
+* tools_seen: knife, cutting board, pan, spatula
+* latest_states: onion=browning, minced meat=browning, sauce=mixed
+
+Recent actions:
+* saute onion
+* add minced meat
+* stir meat mixture
+* season meat mixture
+* pour tomato sauce
+
+Recent observations (last 5 windows):
+* window 2: Person stirs onions in a hot pan.
+* window 3: Person adds minced meat to the pan.
+* window 4: Person stirs the meat and onions.
+* window 5: Person seasons the mixture.
+* window 6: Person pours tomato sauce into the pan.
+```
+
+I did not change `WindowObservation`, `parse_observation()`,
+`run_dynamic_loop.py`, the JSON output format, or how observations are stored.
+The history is still fully preserved; only the prompt summary is now more
+compact.
+
+The old prompt grew with the **total number of windows**. The new prompt is
+bounded by:
+
+- the number of distinct ingredients/tools/states seen so far
+- the number of recent windows included in context
+
+So the cost no longer grows with the full session length in the same way. The
+history remains complete in memory and in JSON logs, but the VLM only receives
+the compact context it needs for the next step.
+
 ## Repository layout
 
 ```
