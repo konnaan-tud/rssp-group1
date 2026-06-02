@@ -5,8 +5,8 @@ what it saw: action, target, ingredients, tools, state changes. We append
 those observations to a list — no mutable graph, no deltas, no add/modify/remove.
 
 The "current state" of the kitchen is derived from this list when needed,
-e.g. by taking the latest observation's action, or unioning ingredients seen
-so far.
+e.g. by taking the latest observation's action, unioning ingredients seen
+so far, or reading the action-object sequence across windows.
 """
 
 from __future__ import annotations
@@ -79,6 +79,15 @@ class ObservationHistory:
 
     def actions_so_far(self) -> list[str]:
         return [o.verb for o in self.observations if o.verb]
+
+    def action_sequence(self) -> list[tuple[str, str]]:
+        """Return the ordered action-object trajectory across windows."""
+        sequence: list[tuple[str, str]] = []
+        for o in self.observations:
+            if not o.verb:
+                continue
+            sequence.append((o.verb, o.object_target))
+        return sequence
 
     def latest_states(self) -> dict[str, str]:
         """For each object, return the most recent state observed across windows."""

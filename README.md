@@ -16,12 +16,50 @@ working pipeline; the methodology and evaluation are described in the proposal.
    list. The next window's prompt receives a short summary of earlier
    observations, so the VLM has context for what has already happened.
 4. From this history we derive the current state of the kitchen on read
-   (union of ingredients seen, latest state per object, action sequence so
-   far). This will feed the upcoming recipe-belief module that scores the
-   history against the static recipe graphs in `recipe_graphs/`.
+   (union of ingredients seen, latest state per object, and an ordered
+   action-object sequence). This will feed the upcoming recipe-belief module
+   that scores the history against the static recipe graphs in
+   `recipe_graphs/`.
 
 The system is intentionally append-only — earlier observations are never
 overwritten — so we keep a faithful audit trail per session.
+
+## Long-horizon reasoning
+
+The current pipeline stores the right observations, but some of the derived
+views are still too flat for recipe recognition over longer sequences.
+`actions_so_far()` keeps the order of verbs, but it drops the object target,
+so:
+
+```text
+["chop", "saute", "add", "saute"]
+```
+
+is less useful than:
+
+```text
+[("chop", "onion"), ("saute", "onion"), ("add", "minced meat"), ("saute", "minced meat")]
+```
+
+That action-object trajectory is a better fit for future recipe matching,
+because recipes depend on what happened, to what, and in what order.
+
+To improve this without changing the architecture, I added
+`ObservationHistory.action_sequence()`. It derives an ordered list of
+`(verb, object_target)` pairs directly from the append-only history. Nothing
+about storage, parsing, prompting, or JSON output changed. This is just a
+new read-only view over the same observations.
+
+This is intentionally the first step rather than full graph reasoning. It is
+simple, easy to test, and immediately useful for future recipe-belief scoring.
+
+Possible next extensions from the same history:
+
+- state histories, e.g. `onion: raw -> diced -> browning`
+- object lifecycles, such as first appearance, transformations, and
+  interactions
+- recipe graph matching between the observed action sequence and a static
+  recipe graph
 
 ## Prompt scalability fix
 
