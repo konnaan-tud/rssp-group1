@@ -24,7 +24,7 @@ working pipeline; the methodology and evaluation are described in the proposal.
 The system is intentionally append-only — earlier observations are never
 overwritten — so we keep a faithful audit trail per session.
 
-## Long-horizon reasoning
+## Long-horizon reasoning fix
 
 The current pipeline stores the right observations, but some of the derived
 views are still too flat for recipe recognition over longer sequences.
