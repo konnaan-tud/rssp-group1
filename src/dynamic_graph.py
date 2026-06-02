@@ -87,6 +87,57 @@ class ObservationHistory:
             out.update(o.object_states)
         return out
 
+    def compact_context(self, recent_windows: int = 5) -> str:
+        """Render a compact prompt context while preserving full history in storage."""
+        if not self.observations:
+            return "(nothing observed yet)"
+
+        recent = self.observations[-recent_windows:]
+
+        ingredients = ", ".join(self.ingredients_seen()) or "—"
+        tools = ", ".join(self.tools_seen()) or "—"
+
+        latest_states = self.latest_states()
+        if latest_states:
+            state_text = ", ".join(
+                f"{obj}={state}" for obj, state in latest_states.items()
+            )
+        else:
+            state_text = "—"
+
+        action_lines = []
+        for o in recent:
+            if not o.verb:
+                continue
+            action = o.verb
+            if o.object_target:
+                action = f"{action} {o.object_target}"
+            action_lines.append(f"* {action}")
+        if not action_lines:
+            action_lines.append("* —")
+
+        observation_lines = []
+        for o in recent:
+            summary = o.summary
+            if not summary:
+                summary = f"verb={o.verb or '—'}; target={o.object_target or '—'}"
+            observation_lines.append(
+                f"* window {o.window}: {summary}"
+            )
+
+        return "\n".join([
+            "Kitchen state:",
+            f"* ingredients_seen: {ingredients}",
+            f"* tools_seen: {tools}",
+            f"* latest_states: {state_text}",
+            "",
+            "Recent actions:",
+            *action_lines,
+            "",
+            f"Recent observations (last {len(recent)} windows):",
+            *observation_lines,
+        ])
+
     def to_dict(self) -> dict:
         return {
             "observations": [o.to_dict() for o in self.observations],
@@ -137,18 +188,7 @@ Output the JSON only.
 
 def build_prompt(history: ObservationHistory, recipe_summary: str = "Unknown.") -> str:
     """Compose the VLM prompt for the next observation window."""
-    if not history.observations:
-        history_summary = "(nothing observed yet)"
-    else:
-        lines = []
-        for o in history.observations:
-            ing = ", ".join(o.ingredients) if o.ingredients else "—"
-            tools = ", ".join(o.tools) if o.tools else "—"
-            lines.append(
-                f"  window {o.window}: verb={o.verb or '—'}, target={o.object_target or '—'}, "
-                f"ingredients=[{ing}], tools=[{tools}]"
-            )
-        history_summary = "\n".join(lines)
+    history_summary = history.compact_context()
 
     return PROMPT_TEMPLATE.format(
         history_summary=history_summary,
