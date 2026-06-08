@@ -1,13 +1,14 @@
 {
-  "name": "cucumber salad",
+  "name": "cucumber_slices_with_dill",
   "category": "labor_day",
   "all_ingredients": [
     "cucumber",
     "onion",
-    "white vinegar",
+    "dill weed",
     "white sugar",
+    "white vinegar",
     "water",
-    "dill"
+    "salt"
   ],
   "stages": [
     {
@@ -38,15 +39,16 @@
         {
           "step_id": "s2_1",
           "actions": [
-            "combine vinegar, sugar, water"
+            "mix sugar, vinegar, water, salt"
           ],
           "ingredients": [
-            "white vinegar",
             "white sugar",
-            "water"
+            "white vinegar",
+            "water",
+            "salt"
           ],
           "object_states": {
-            "mixture": "boiling"
+            "dressing": "mixed"
           }
         }
       ]
@@ -58,41 +60,27 @@
         {
           "step_id": "s3_1",
           "actions": [
-            "toss cucumbers, onions"
+            "combine cucumber, onion, dill",
+            "pour dressing over mixture"
           ],
           "ingredients": [
             "cucumber",
-            "onion"
+            "onion",
+            "dill weed",
+            "dressing"
           ],
           "object_states": {
-            "salad": "mixed"
+            "mixture": "combined and dressed"
           }
         },
         {
           "step_id": "s3_2",
           "actions": [
-            "pour vinegar mixture over salad",
-            "stir in dill"
-          ],
-          "ingredients": [
-            "white vinegar",
-            "white sugar",
-            "water",
-            "dill"
-          ],
-          "object_states": {
-            "salad": "marinating"
-          }
-        },
-        {
-          "step_id": "s3_3",
-          "actions": [
-            "cover and refrigerate"
+            "cover bowl",
+            "refrigerate"
           ],
           "ingredients": [],
-          "object_states": {
-            "salad": "chilled, marinated"
-          }
+          "object_states": {}
         }
       ]
     }

@@ -1,0 +1,96 @@
+{
+  "name": "tomato_cucumber_salad_with_mint",
+  "category": "kosher",
+  "all_ingredients": [
+    "red wine vinegar",
+    "white sugar",
+    "salt",
+    "cucumber",
+    "tomato",
+    "onion",
+    "mint",
+    "olive oil",
+    "salt pepper"
+  ],
+  "stages": [
+    {
+      "stage_id": 1,
+      "name": "Prepare Dressing",
+      "steps": [
+        {
+          "step_id": "s1_1",
+          "actions": [
+            "combine vinegar",
+            "add sugar",
+            "mix in salt"
+          ],
+          "ingredients": [
+            "red wine vinegar",
+            "white sugar",
+            "salt"
+          ],
+          "object_states": {
+            "vinegar": "mixed with sugar and salt"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 2,
+      "name": "Marinate Cucumbers",
+      "steps": [
+        {
+          "step_id": "s2_1",
+          "actions": [
+            "marinate cucumbers"
+          ],
+          "ingredients": [
+            "cucumber",
+            "vinegar sugar salt mixture"
+          ],
+          "object_states": {
+            "cucumber": "soaked in vinegar, sugar and salt"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 3,
+      "name": "Combine Ingredients",
+      "steps": [
+        {
+          "step_id": "s3_1",
+          "actions": [
+            "toss tomatoes",
+            "add onion",
+            "mix mint",
+            "add olive oil"
+          ],
+          "ingredients": [
+            "tomato",
+            "onion",
+            "mint",
+            "olive oil"
+          ],
+          "object_states": {
+            "tomato": "mixed with other ingredients"
+          }
+        },
+        {
+          "step_id": "s3_2",
+          "actions": [
+            "combine marinated cucumbers",
+            "season with salt and pepper"
+          ],
+          "ingredients": [
+            "cucumber vinegar sugar salt mixture",
+            "salt pepper"
+          ],
+          "object_states": {
+            "cucumber vinegar sugar salt mixture": "mixed with other ingredients"
+          }
+        }
+      ]
+    }
+  ]
+}

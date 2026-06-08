@@ -1,0 +1,85 @@
+{
+  "name": "tomato_cucumber_onion_salad",
+  "category": "paleo",
+  "all_ingredients": [
+    "cucumber",
+    "tomato",
+    "olive oil",
+    "red wine vinegar",
+    "onion",
+    "white pepper",
+    "salt"
+  ],
+  "stages": [
+    {
+      "stage_id": 1,
+      "name": "prep vegetables and seasonings",
+      "steps": [
+        {
+          "step_id": "s1_1",
+          "actions": [
+            "slice cucumber",
+            "chop tomato",
+            "mince onion"
+          ],
+          "ingredients": [
+            "cucumber",
+            "tomato",
+            "onion"
+          ],
+          "object_states": {
+            "cucumber": "sliced",
+            "tomato": "chopped",
+            "onion": "minced"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 2,
+      "name": "make dressing",
+      "steps": [
+        {
+          "step_id": "s2_1",
+          "actions": [
+            "combine olive oil",
+            "red wine vinegar",
+            "white pepper"
+          ],
+          "ingredients": [
+            "olive oil",
+            "red wine vinegar",
+            "white pepper"
+          ],
+          "object_states": {
+            "dressing": "mixed"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 3,
+      "name": "combine and finish",
+      "steps": [
+        {
+          "step_id": "s3_1",
+          "actions": [
+            "toss vegetables",
+            "add dressing",
+            "season with salt"
+          ],
+          "ingredients": [
+            "cucumber",
+            "tomato",
+            "onion",
+            "dressing",
+            "salt"
+          ],
+          "object_states": {
+            "salad": "tossed and seasoned"
+          }
+        }
+      ]
+    }
+  ]
+}

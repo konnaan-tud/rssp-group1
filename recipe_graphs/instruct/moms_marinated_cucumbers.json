@@ -1,5 +1,5 @@
 {
-  "name": "mom_s_marinated_cucumbers",
+  "name": "moms_marinated_cucumbers",
   "category": "kosher",
   "all_ingredients": [
     "cucumber",
@@ -13,26 +13,26 @@
   "stages": [
     {
       "stage_id": 1,
-      "name": "prep cucumbers and mix dressing",
+      "name": "prep cucumbers and mix marinade",
       "steps": [
         {
           "step_id": "s1_1",
           "actions": [
             "slice cucumbers",
-            "sprinkle with salt"
+            "sprinkle salt"
           ],
           "ingredients": [
             "cucumber",
             "salt"
           ],
           "object_states": {
-            "cucumber": "sliced and salty"
+            "cucumber": "salted and sliced"
           }
         },
         {
           "step_id": "s1_2",
           "actions": [
-            "mix sugar, vinegar, onion, water, celery seed"
+            "mix ingredients"
           ],
           "ingredients": [
             "white sugar",
@@ -42,7 +42,7 @@
             "celery seed"
           ],
           "object_states": {
-            "dressing": "mixed"
+            "marinade": "mixed"
           }
         }
       ]
@@ -58,7 +58,7 @@
           ],
           "ingredients": [
             "cucumber",
-            "salt"
+            "salted and sliced"
           ],
           "object_states": {
             "cucumber": "moisture released"
@@ -67,15 +67,15 @@
         {
           "step_id": "s2_2",
           "actions": [
-            "add cucumbers to dressing",
-            "stir until coated"
+            "add marinade to cucumbers"
           ],
           "ingredients": [
+            "marinade",
             "cucumber",
-            "dressing"
+            "moisture released"
           ],
           "object_states": {
-            "cucumbers": "coated with dressing"
+            "cucumbers": "coated with marinade"
           }
         }
       ]
@@ -91,10 +91,10 @@
           ],
           "ingredients": [
             "cucumbers",
-            "dressing"
+            "coated with marinade"
           ],
           "object_states": {
-            "cucumbers": "cooled and marinated"
+            "cucumbers": "marinated and chilled"
           }
         }
       ]

@@ -1,0 +1,98 @@
+{
+  "name": "freezer_slaw",
+  "category": "healthy_recipes",
+  "all_ingredients": [
+    "cabbage",
+    "bell pepper",
+    "onion",
+    "carrot",
+    "boiling water",
+    "salt",
+    "white sugar",
+    "water",
+    "cider vinegar",
+    "celery seed"
+  ],
+  "stages": [
+    {
+      "stage_id": 1,
+      "name": "prep vegetables",
+      "steps": [
+        {
+          "step_id": "s1_1",
+          "actions": [
+            "chop cabbage",
+            "slice bell pepper",
+            "dice onion",
+            "grate carrot"
+          ],
+          "ingredients": [
+            "cabbage",
+            "bell pepper",
+            "onion",
+            "carrot"
+          ],
+          "object_states": {
+            "cabbage": "chopped",
+            "bell pepper": "sliced",
+            "onion": "diced",
+            "carrot": "grated"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 2,
+      "name": "prepare brine",
+      "steps": [
+        {
+          "step_id": "s2_1",
+          "actions": [
+            "mix water and salt"
+          ],
+          "ingredients": [
+            "boiling water",
+            "salt"
+          ],
+          "object_states": {
+            "cabbage mixture": "soaked in brine"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 3,
+      "name": "make dressing and combine",
+      "steps": [
+        {
+          "step_id": "s3_1",
+          "actions": [
+            "mix sugar, water, vinegar, celery seed"
+          ],
+          "ingredients": [
+            "white sugar",
+            "water",
+            "cider vinegar",
+            "celery seed"
+          ],
+          "object_states": {
+            "dressing": "cooled and ready to use"
+          }
+        },
+        {
+          "step_id": "s3_2",
+          "actions": [
+            "toss vegetables with dressing"
+          ],
+          "ingredients": [
+            "cabbage mixture",
+            "dressing"
+          ],
+          "object_states": {
+            "slaw": "mixed well"
+          }
+        }
+      ]
+    }
+  ]
+}

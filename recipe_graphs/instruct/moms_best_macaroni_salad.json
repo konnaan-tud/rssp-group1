@@ -1,0 +1,115 @@
+{
+  "name": "moms_best_macaroni_salad",
+  "category": "pasta_salads",
+  "all_ingredients": [
+    "ounc elbow macaroni",
+    "carrot",
+    "onion",
+    "bell pepper",
+    "celery",
+    "mayonnaise",
+    "condensed milk",
+    "white sugar",
+    "white vinegar",
+    "salt",
+    "pepper"
+  ],
+  "stages": [
+    {
+      "stage_id": 1,
+      "name": "cook macaroni",
+      "steps": [
+        {
+          "step_id": "s1_1",
+          "actions": [
+            "bring water to a boil",
+            "cook elbow macaroni"
+          ],
+          "ingredients": [
+            "ounc elbow macaroni"
+          ],
+          "object_states": {
+            "ounc elbow macaroni": "cooked and drained"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 2,
+      "name": "prepare vegetables",
+      "steps": [
+        {
+          "step_id": "s2_1",
+          "actions": [
+            "slice carrots",
+            "chop onion"
+          ],
+          "ingredients": [
+            "carrot",
+            "onion"
+          ],
+          "object_states": {
+            "carrot": "sliced",
+            "onion": "chopped"
+          }
+        },
+        {
+          "step_id": "s2_2",
+          "actions": [
+            "chop bell pepper",
+            "chop celery"
+          ],
+          "ingredients": [
+            "bell pepper",
+            "celery"
+          ],
+          "object_states": {
+            "bell pepper": "chopped",
+            "celery": "chopped"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 3,
+      "name": "combine and finish",
+      "steps": [
+        {
+          "step_id": "s3_1",
+          "actions": [
+            "mix vegetables",
+            "add dressing"
+          ],
+          "ingredients": [
+            "carrot",
+            "onion",
+            "bell pepper",
+            "celery",
+            "mayonnaise",
+            "condensed milk",
+            "white sugar",
+            "white vinegar",
+            "salt",
+            "pepper"
+          ],
+          "object_states": {
+            "vegetables and dressing": "mixed"
+          }
+        },
+        {
+          "step_id": "s3_2",
+          "actions": [
+            "add macaroni",
+            "toss gently"
+          ],
+          "ingredients": [
+            "cooked elbow macaroni"
+          ],
+          "object_states": {
+            "macaroni salad": "combined and ready to chill"
+          }
+        }
+      ]
+    }
+  ]
+}

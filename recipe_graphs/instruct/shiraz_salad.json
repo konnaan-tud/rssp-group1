@@ -1,0 +1,112 @@
+{
+  "name": "shiraz_salad",
+  "category": "diabetic",
+  "all_ingredients": [
+    "cucumber",
+    "tomato",
+    "onion",
+    "lemon juice",
+    "mint",
+    "salt",
+    "black pepper"
+  ],
+  "stages": [
+    {
+      "stage_id": 1,
+      "name": "prep vegetables and herbs",
+      "steps": [
+        {
+          "step_id": "s1_1",
+          "actions": [
+            "wash cucumber",
+            "slice cucumber"
+          ],
+          "ingredients": [
+            "cucumber"
+          ],
+          "object_states": {
+            "cucumber": "sliced"
+          }
+        },
+        {
+          "step_id": "s1_2",
+          "actions": [
+            "wash tomato",
+            "chop tomato"
+          ],
+          "ingredients": [
+            "tomato"
+          ],
+          "object_states": {
+            "tomato": "chopped"
+          }
+        },
+        {
+          "step_id": "s1_3",
+          "actions": [
+            "slice onion"
+          ],
+          "ingredients": [
+            "onion"
+          ],
+          "object_states": {
+            "onion": "sliced"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 2,
+      "name": "prepare dressing and combine ingredients",
+      "steps": [
+        {
+          "step_id": "s2_1",
+          "actions": [
+            "squeeze lemon juice",
+            "mix with salt, pepper"
+          ],
+          "ingredients": [],
+          "object_states": {
+            "dressing": "mixed"
+          }
+        },
+        {
+          "step_id": "s2_2",
+          "actions": [
+            "chop mint"
+          ],
+          "ingredients": [
+            "mint"
+          ],
+          "object_states": {
+            "mint": "chopped"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 3,
+      "name": "combine and finish",
+      "steps": [
+        {
+          "step_id": "s3_1",
+          "actions": [
+            "mix all ingredients together"
+          ],
+          "ingredients": [
+            "cucumber",
+            "tomato",
+            "onion",
+            "lemon juice",
+            "mint",
+            "salt",
+            "black pepper"
+          ],
+          "object_states": {
+            "salad": "mixed"
+          }
+        }
+      ]
+    }
+  ]
+}

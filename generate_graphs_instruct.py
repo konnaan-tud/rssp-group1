@@ -5,8 +5,8 @@ import requests
 import time
 
 # ── Settings ───────────────────────────────────────────────────────────────
-LM_STUDIO_URL = "http://localhost:1234/v1/chat/completions"
-MODEL_ID = "qwen2.5-7b-instruct"
+LM_STUDIO_URL = "http://localhost:11434/v1/chat/completions"
+MODEL_ID = "qwen2.5:7b"
 OUTPUT_DIR = "recipe_graphs/instruct"
 CSV_PATH = "dataset.csv"
 
@@ -118,7 +118,7 @@ def generate_graphs(target_recipes=None):
             parsed = parse_json(raw, name)
 
             # Save as JSON file
-            filename = name.lower().replace(" ", "_").replace("'", "").replace("(", "").replace(")", "") + ".json"
+            filename = name.lower().replace(" ", "_").replace("'", "").replace("(", "").replace(")", "").replace("__", "_") + ".json"
             filepath = os.path.join(OUTPUT_DIR, filename)
             with open(filepath, "w", encoding="utf-8") as out:
                 json.dump(parsed, out, indent=2)
@@ -131,9 +131,10 @@ def generate_graphs(target_recipes=None):
 
 if __name__ == "__main__":
     # Start with just the three target recipes
-    target = [
-        "Cucumber Salad",
-        "Mom's Marinated Cucumbers",
-        "Mizeria (Polish Cucumber Salad)"
-    ]
-    generate_graphs(target_recipes=target)
+    # target = [
+    #     "Cucumber Salad",
+    #     "Mom's Marinated Cucumbers",
+    #     "Mizeria (Polish Cucumber Salad)"
+    # ]
+    # generate_graphs(target_recipes=target)
+    generate_graphs()
