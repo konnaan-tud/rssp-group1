@@ -1,0 +1,95 @@
+{
+  "window": 3,
+  "clip": "data/cooking_minced_meat.mp4",
+  "elapsed_seconds": 17.79267907142639,
+  "raw_response": "{\n  \"summary\": \"stirring ground meat and onions in a pan\",\n  \"verb\": \"stir\",\n  \"object_target\": \"ground meat and onions\",\n  \"ingredients\": [\"ground meat\", \"onions\"],\n  \"tools\": [\"pan\"],\n  \"object_states\": {\"ground meat and onions\": \"browning\"}\n}",
+  "parsed_observation": {
+    "window": 3,
+    "clip_path": "data/cooking_minced_meat.mp4",
+    "summary": "stirring ground meat and onions in a pan",
+    "verb": "stir",
+    "object_target": "ground meat and onions",
+    "ingredients": [
+      "ground meat",
+      "onions"
+    ],
+    "tools": [
+      "pan"
+    ],
+    "object_states": {
+      "ground meat and onions": "browning"
+    }
+  },
+  "history_after": {
+    "observations": [
+      {
+        "window": 1,
+        "clip_path": "data/chopping_onions.mp4",
+        "summary": "chopping onions into small pieces",
+        "verb": "chop",
+        "object_target": "onions",
+        "ingredients": [
+          "onions"
+        ],
+        "tools": [
+          "knife"
+        ],
+        "object_states": {
+          "onions": "diced"
+        }
+      },
+      {
+        "window": 2,
+        "clip_path": "data/cooking_onions.mp4",
+        "summary": "onions are being saut\u00e9ed in a pan",
+        "verb": "saute",
+        "object_target": "onions",
+        "ingredients": [
+          "onions"
+        ],
+        "tools": [
+          "pan"
+        ],
+        "object_states": {
+          "onions": "browning"
+        }
+      },
+      {
+        "window": 3,
+        "clip_path": "data/cooking_minced_meat.mp4",
+        "summary": "stirring ground meat and onions in a pan",
+        "verb": "stir",
+        "object_target": "ground meat and onions",
+        "ingredients": [
+          "ground meat",
+          "onions"
+        ],
+        "tools": [
+          "pan"
+        ],
+        "object_states": {
+          "ground meat and onions": "browning"
+        }
+      }
+    ],
+    "derived": {
+      "ingredients_seen": [
+        "onions",
+        "ground meat"
+      ],
+      "tools_seen": [
+        "knife",
+        "pan"
+      ],
+      "actions_so_far": [
+        "chop",
+        "saute",
+        "stir"
+      ],
+      "latest_states": {
+        "onions": "browning",
+        "ground meat and onions": "browning"
+      }
+    }
+  }
+}

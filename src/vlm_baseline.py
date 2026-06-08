@@ -36,7 +36,7 @@ from .prompts import get_prompt, PROMPTS
 from .video_utils import extract_clip, get_video_duration
 
 
-DEFAULT_MODEL = "Qwen/Qwen2.5-VL-3B-Instruct"
+DEFAULT_MODEL = "Qwen/Qwen2.5-VL-7B-Instruct"
 # For laptop / small-GPU development you can swap this to:
 #     "Qwen/Qwen2.5-VL-3B-Instruct"
 

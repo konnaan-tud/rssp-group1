@@ -1,0 +1,74 @@
+{
+  "name": "sweet_and_tangy_thai_cucumber_salad",
+  "category": "low_calorie",
+  "all_ingredients": [
+    "white sugar",
+    "water",
+    "distilled white vinegar",
+    "salt",
+    "cucumber",
+    "onion"
+  ],
+  "stages": [
+    {
+      "stage_id": 1,
+      "name": "make_dressing",
+      "steps": [
+        {
+          "step_id": "s1_1",
+          "actions": [
+            "whisk sugar",
+            "add water",
+            "add vinegar",
+            "add salt"
+          ],
+          "ingredients": [
+            "white sugar",
+            "water",
+            "distilled white vinegar",
+            "salt"
+          ],
+          "object_states": {
+            "dressing": "well_combined"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 2,
+      "name": "combine_ingredients",
+      "steps": [
+        {
+          "step_id": "s2_1",
+          "actions": [
+            "stir in cucumber",
+            "stir in onion"
+          ],
+          "ingredients": [
+            "cucumber",
+            "onion"
+          ],
+          "object_states": {
+            "salad": "mixed"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 3,
+      "name": "finish_salad",
+      "steps": [
+        {
+          "step_id": "s3_1",
+          "actions": [
+            "refrigerate salad"
+          ],
+          "ingredients": [],
+          "object_states": {
+            "salad": "chilled"
+          }
+        }
+      ]
+    }
+  ]
+}

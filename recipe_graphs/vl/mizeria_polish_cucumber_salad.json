@@ -1,0 +1,110 @@
+{
+  "name": "mizeria",
+  "category": "christmas",
+  "all_ingredients": [
+    "cucumber",
+    "salt",
+    "dill",
+    "sour cream",
+    "lemon juice",
+    "white sugar",
+    "black pepper"
+  ],
+  "stages": [
+    {
+      "stage_id": 1,
+      "name": "Prepare Cucumbers",
+      "steps": [
+        {
+          "step_id": "s1_1",
+          "actions": [
+            "place cucumbers into a colander",
+            "sprinkle salt generously"
+          ],
+          "ingredients": [
+            "cucumber",
+            "salt"
+          ],
+          "object_states": {
+            "cucumber": "soft"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 2,
+      "name": "Combine Ingredients",
+      "steps": [
+        {
+          "step_id": "s2_1",
+          "actions": [
+            "squeeze liquid from cucumbers",
+            "transfer to a bowl with dill"
+          ],
+          "ingredients": [
+            "cucumber",
+            "dill"
+          ],
+          "object_states": {
+            "cucumber": "liquid removed"
+          }
+        },
+        {
+          "step_id": "s2_2",
+          "actions": [
+            "mix sour cream, lemon juice, and sugar together in a bowl"
+          ],
+          "ingredients": [
+            "sour cream",
+            "lemon juice",
+            "white sugar"
+          ],
+          "object_states": {
+            "sour cream mixture": "mixed"
+          }
+        },
+        {
+          "step_id": "s2_3",
+          "actions": [
+            "add sour cream mixture to cucumbers and toss to coat"
+          ],
+          "ingredients": [
+            "cucumber",
+            "sour cream mixture"
+          ],
+          "object_states": {
+            "cucumber": "tossed with dressing"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 3,
+      "name": "Season and Chill",
+      "steps": [
+        {
+          "step_id": "s3_1",
+          "actions": [
+            "season with pepper"
+          ],
+          "ingredients": [
+            "black pepper"
+          ],
+          "object_states": {
+            "cucumber": "peppered"
+          }
+        },
+        {
+          "step_id": "s3_2",
+          "actions": [
+            "cover and chill for at least 30 minutes"
+          ],
+          "ingredients": [],
+          "object_states": {
+            "cucumber": "chilled"
+          }
+        }
+      ]
+    }
+  ]
+}

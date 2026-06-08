@@ -1,0 +1,101 @@
+{
+  "name": "claremont_salad",
+  "category": "coleslaws",
+  "all_ingredients": [
+    "cabbage",
+    "cucumber",
+    "carrot",
+    "bermuda onion",
+    "distilled white vinegar",
+    "white sugar",
+    "vegetable oil",
+    "water",
+    "salt"
+  ],
+  "stages": [
+    {
+      "stage_id": 1,
+      "name": "prep vegetables",
+      "steps": [
+        {
+          "step_id": "s1_1",
+          "actions": [
+            "wash cabbage",
+            "slice cucumbers",
+            "grate carrots",
+            "chop onion"
+          ],
+          "ingredients": [
+            "cabbage",
+            "cucumber",
+            "carrot",
+            "bermuda onion"
+          ],
+          "object_states": {
+            "cabbage": "washed and chopped",
+            "cucumber": "sliced",
+            "carrot": "grated",
+            "bermuda onion": "chopped"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 2,
+      "name": "make dressing",
+      "steps": [
+        {
+          "step_id": "s2_1",
+          "actions": [
+            "whisk vinegar, sugar, oil, water, salt"
+          ],
+          "ingredients": [
+            "distilled white vinegar",
+            "white sugar",
+            "vegetable oil",
+            "water",
+            "salt"
+          ],
+          "object_states": {
+            "dressing": "mixed"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 3,
+      "name": "combine and finish",
+      "steps": [
+        {
+          "step_id": "s3_1",
+          "actions": [
+            "pour dressing over vegetables",
+            "toss to coat"
+          ],
+          "ingredients": [
+            "cabbage",
+            "cucumber",
+            "carrot",
+            "bermuda onion",
+            "dressing"
+          ],
+          "object_states": {
+            "salad": "mixed and coated"
+          }
+        },
+        {
+          "step_id": "s3_2",
+          "actions": [
+            "refrigerate salad"
+          ],
+          "ingredients": [
+            "salad"
+          ],
+          "object_states": {
+            "salad": "chilled"
+          }
+        }
+      ]
+    }
+  ]
+}

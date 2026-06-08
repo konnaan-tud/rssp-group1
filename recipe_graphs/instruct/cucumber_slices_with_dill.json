@@ -1,0 +1,88 @@
+{
+  "name": "cucumber_slices_with_dill",
+  "category": "labor_day",
+  "all_ingredients": [
+    "cucumber",
+    "onion",
+    "dill weed",
+    "white sugar",
+    "white vinegar",
+    "water",
+    "salt"
+  ],
+  "stages": [
+    {
+      "stage_id": 1,
+      "name": "prep ingredients",
+      "steps": [
+        {
+          "step_id": "s1_1",
+          "actions": [
+            "slice cucumbers",
+            "chop onion"
+          ],
+          "ingredients": [
+            "cucumber",
+            "onion"
+          ],
+          "object_states": {
+            "cucumber": "sliced",
+            "onion": "chopped"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 2,
+      "name": "make dressing",
+      "steps": [
+        {
+          "step_id": "s2_1",
+          "actions": [
+            "mix sugar, vinegar, water, salt"
+          ],
+          "ingredients": [
+            "white sugar",
+            "white vinegar",
+            "water",
+            "salt"
+          ],
+          "object_states": {
+            "dressing": "mixed"
+          }
+        }
+      ]
+    },
+    {
+      "stage_id": 3,
+      "name": "combine and finish",
+      "steps": [
+        {
+          "step_id": "s3_1",
+          "actions": [
+            "combine cucumber, onion, dill",
+            "pour dressing over mixture"
+          ],
+          "ingredients": [
+            "cucumber",
+            "onion",
+            "dill weed",
+            "dressing"
+          ],
+          "object_states": {
+            "mixture": "combined and dressed"
+          }
+        },
+        {
+          "step_id": "s3_2",
+          "actions": [
+            "cover bowl",
+            "refrigerate"
+          ],
+          "ingredients": [],
+          "object_states": {}
+        }
+      ]
+    }
+  ]
+}

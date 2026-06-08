@@ -1,0 +1,5 @@
+Clip: capsicum cut
+Prompt: prompt_A_open
+Time: 30.6s
+============================================================
+C cuts the pepper with knife in her right hand on the chopping board.

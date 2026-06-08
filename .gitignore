@@ -37,8 +37,8 @@ data/*/        # any subfolders inside data/ (per-participant HD-EPIC dirs)
 *.pth
 
 # Outputs (logs, model responses) — keep folder, drop contents
-outputs/*
-!outputs/.gitkeep
+#outputs/*
+#!outputs/.gitkeep
 
 # Local config / API keys
 .env

@@ -1,0 +1,5 @@
+Clip: stirring
+Prompt: prompt_A_open
+Time: 52.3s
+============================================================
+C stirs the food in the pan with both spatulas.
