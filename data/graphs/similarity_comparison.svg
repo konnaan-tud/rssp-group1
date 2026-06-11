@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="520">
+<rect width="100%" height="100%" fill="white"/>
+<text x="450.0" y="35" text-anchor="middle" font-size="22" font-family="Arial">Similarity comparison: all salads vs selected dataset</text>
+<line x1="90" y1="70" x2="90" y2="430" stroke="black"/>
+<line x1="90" y1="430" x2="860" y2="430" stroke="black"/>
+<line x1="85" y1="430.0" x2="860" y2="430.0" stroke="#DDDDDD"/>
+<text x="80" y="434.0" text-anchor="end" font-size="12" font-family="Arial">0.00</text>
+<line x1="85" y1="358.0" x2="860" y2="358.0" stroke="#DDDDDD"/>
+<text x="80" y="362.0" text-anchor="end" font-size="12" font-family="Arial">0.12</text>
+<line x1="85" y1="286.0" x2="860" y2="286.0" stroke="#DDDDDD"/>
+<text x="80" y="290.0" text-anchor="end" font-size="12" font-family="Arial">0.24</text>
+<line x1="85" y1="214.0" x2="860" y2="214.0" stroke="#DDDDDD"/>
+<text x="80" y="218.0" text-anchor="end" font-size="12" font-family="Arial">0.36</text>
+<line x1="85" y1="142.0" x2="860" y2="142.0" stroke="#DDDDDD"/>
+<text x="80" y="146.0" text-anchor="end" font-size="12" font-family="Arial">0.48</text>
+<line x1="85" y1="70.0" x2="860" y2="70.0" stroke="#DDDDDD"/>
+<text x="80" y="74.0" text-anchor="end" font-size="12" font-family="Arial">0.60</text>
+<rect x="154.2" y="396.9" width="64.2" height="33.1" fill="#444444"/>
+<text x="185.9" y="391.9" text-anchor="middle" font-size="11" font-family="Arial">0.06</text>
+<rect x="410.8" y="393.0" width="64.2" height="37.0" fill="#444444"/>
+<text x="442.5" y="388.0" text-anchor="middle" font-size="11" font-family="Arial">0.06</text>
+<rect x="667.5" y="396.3" width="64.2" height="33.7" fill="#444444"/>
+<text x="699.2" y="391.3" text-anchor="middle" font-size="11" font-family="Arial">0.06</text>
+<rect x="229.7" y="114.2" width="64.2" height="315.8" fill="#888888"/>
+<text x="261.4" y="109.2" text-anchor="middle" font-size="11" font-family="Arial">0.53</text>
+<rect x="486.3" y="363.2" width="64.2" height="66.8" fill="#888888"/>
+<text x="518.0" y="358.2" text-anchor="middle" font-size="11" font-family="Arial">0.11</text>
+<rect x="743.0" y="151.6" width="64.2" height="278.4" fill="#888888"/>
+<text x="774.7" y="146.6" text-anchor="middle" font-size="11" font-family="Arial">0.46</text>
+<text x="218.3" y="455" text-anchor="middle" font-size="13" font-family="Arial">ingredient</text>
+<text x="475.0" y="455" text-anchor="middle" font-size="13" font-family="Arial">process</text>
+<text x="731.7" y="455" text-anchor="middle" font-size="13" font-family="Arial">combined</text>
+<rect x="680" y="65" width="16" height="16" fill="#444444"/>
+<text x="704" y="78" font-size="13" font-family="Arial">all salads mean</text>
+<rect x="680" y="89" width="16" height="16" fill="#888888"/>
+<text x="704" y="102" font-size="13" font-family="Arial">selected mean</text>
+</svg>
