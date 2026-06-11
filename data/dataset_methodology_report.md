@@ -190,6 +190,36 @@ Updated statistics for the 20-recipe dataset:
 - Mean process similarity (selected): 0.111 (vs. 0.062 for all usable salads)
 - Selection threshold: 0.63
 
+### Open questions for discussion with the probability-distribution / question-strategy team
+
+The choices above (target size 20, maximize overall mean similarity, exclude near-duplicates)
+are a reasonable starting point but are proxies, not the actual requirement from the meetings.
+Two points worth revisiting once the probability-distribution and information-gain approach
+(Akash/Pepijn) is more concrete:
+
+1. **Recipe count is not fixed at 20.** The meeting notes say the right number "depends" on the
+   information-gain/probability-distribution behaviour. `make_dataset.py --target-size N` can
+   regenerate the dataset for any N; 20 should be treated as a default, not a final answer.
+   We tested the full range: 15 recipes gives mean similarity 0.494, 20 gives 0.464, 25 gives
+   0.407 (with one near-zero outlier pair), 30 gives 0.389. Larger components (e.g. the 29-recipe
+   component at threshold 0.61) don't meaningfully improve on the 20-recipe result (0.465 vs.
+   0.464), so going above ~20-21 mainly trades coherence for quantity.
+
+2. **Near-duplicates may not be a problem to avoid.** We currently optimize for overall
+   ingredient/process similarity and exclude near-duplicate recipes. But Catha's point about
+   "intelligence in the questions" (not asking a question if it won't increase information gain,
+   e.g. the chopping/knife example) suggests near-duplicate recipe pairs could be a *useful* test
+   case: two recipes differing only in a detail that's not visually observable (e.g. white vs.
+   brown sugar) are exactly the situation where the system should recognize that no further
+   question can resolve the ambiguity, rather than something to filter out.
+
+3. **A possibly better selection criterion** would target overlap in the *early* steps/ingredients
+   specifically (recipes that look identical for the first 1-2 actions but diverge later), rather
+   than overall recipe similarity — this maps more directly onto "the system should not be able
+   to recognize the recipe within a few steps." This would require scoring similarity over
+   prefixes of `action_sequence`/`core_ingredients_for_similarity` instead of (or in addition to)
+   the whole-recipe similarity used here.
+
 Reproduce with:
 
     python make_dataset.py --csv salad_recipes.csv --target-size 20 --force-graphs
