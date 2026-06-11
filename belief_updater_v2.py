@@ -308,6 +308,35 @@ class BeliefUpdaterV2:
         self._ig_q_history = []
         self._last_similarities = {}
 
+    def copy(self) -> "BeliefUpdaterV2":
+        """
+        Cheap clone for what-if simulations (used by questioning_planner).
+
+        Shares the heavy read-only state (recipe term vectors, embedder
+        model, known vocab) and copies only the mutable belief state. Much
+        cheaper than copy.deepcopy() because we don't duplicate the model
+        or the recipe vectors — both are read by f1_match() but never
+        mutated.
+        """
+        clone = object.__new__(BeliefUpdaterV2)
+        # Shared read-only state ───────────────────────────────────────
+        clone.recipe_term_vectors = self.recipe_term_vectors
+        clone.recipe_names = self.recipe_names
+        clone.N = self.N
+        clone.known_recipe_terms = self.known_recipe_terms
+        clone.embedder = self.embedder
+        clone.temperature = self.temperature
+        clone.threshold = self.threshold
+        # Copied mutable state ─────────────────────────────────────────
+        clone.belief = dict(self.belief)
+        clone.history = [dict(self.belief)]
+        clone._obs_terms = dict(self._obs_terms)
+        clone._entropy_before_last_answer = None
+        clone._entropy_after_last_answer = None
+        clone._ig_q_history = []
+        clone._last_similarities = dict(self._last_similarities)
+        return clone
+
     def summary(self) -> dict:
         top, prob = self.top_recipe()
         return {

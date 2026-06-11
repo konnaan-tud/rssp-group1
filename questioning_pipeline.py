@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 from pathlib import Path
 
@@ -43,58 +45,96 @@ def build_question_prompt(
 You are a clarification-question planner for a VLM-based cooking observer.
 
 The observer has watched a short cooking video clip and currently has uncertainty
-over which recipe is being prepared.
+over which recipe is being prepared. The candidate recipes are listed below.
 
-Your task:
-Generate exactly 3 open wh-questions that would reduce uncertainty over the
-current recipe belief state as much as possible.
+YOUR TASK
+Generate exactly 3 open wh-questions whose answers would reduce uncertainty
+over the current recipe belief state as much as possible.
 
-The questions should be useful for distinguishing between the currently plausible
-recipes. The questions should also not 
+═══ HOW TO FILL "targets" — READ CAREFULLY ═══
 
-Do not ask directly:
-- "What recipe are you making?"
-- "Which recipe is this?"
+The "targets" field is the most important part of each question. It is the
+list of CONCRETE WORDS OR PHRASES that the human's answer might contain —
+actual ingredient names or action names drawn from the recipe vocabulary.
 
-Only ask wh-questions.
-Each question must begin with one of:
-what, which, where, when, who, why, or how.
+A downstream planner uses these targets to test whether the question would
+actually distinguish between recipes. Abstract placeholder names CANNOT be
+matched against any recipe and make the question useless.
 
-Rank the questions from best to worst by expected information gain.
+GOOD targets (concrete ingredients or actions from the recipes below):
+    "targets": ["sour cream", "white vinegar", "mayonnaise"]
+    "targets": ["whisk", "boil", "stir"]
+    "targets": ["dill", "celery seed", "mint"]
 
-CURRENT BELIEF STATE:
+BAD targets (NEVER produce these — they cannot be matched):
+    "targets": ["main_ingredient"]
+    "targets": ["stage_id"]
+    "targets": ["next_action"]
+    "targets": ["first_step"]
+    "targets": ["ingredient or action being tested"]
+
+Every string in "targets" must appear — in the same or very similar form —
+in the "all_ingredients" or "actions" fields of one of the recipe graphs
+shown below.
+
+═══ FORMAT ═══
+
+For each question return:
+  - "question":          the natural-language clarification question
+  - "question_form":     "wh"
+  - "targets":           list of concrete ingredient/action strings
+  - "distinguishes":     list of recipe names this question helps separate
+  - "expected_information_gain_reason": one-sentence justification
+
+Do not ask:
+  - "What recipe are you making?"
+  - "Which recipe is this?"
+
+Each question must begin with one of: what, which, where, when, why, how.
+
+Rank from best to worst by expected information gain.
+
+═══ CURRENT BELIEF STATE ═══
 {belief_state_json}
 
-STATIC RECIPE GRAPHS:
+═══ STATIC RECIPE GRAPHS ═══
+(These are the only candidate recipes. Draw your targets from the
+ingredients and actions listed here.)
+
 {static_graphs_json}
 
-Return only valid JSON in this exact format:
+═══ RESPONSE ═══
+
+Return ONLY valid JSON in the format below. The examples use concrete
+vocabulary — replace them with concrete vocabulary drawn from the recipes
+above. DO NOT keep the schema-style placeholders like "stage_id" or
+"main_ingredient".
 
 {{
   "questions": [
     {{
       "rank": 1,
-      "question": "Which ingredient are you adding next?",
+      "question": "Which ingredient are you adding to the dressing?",
       "question_form": "wh",
-      "targets": ["ingredient or action being tested"],
-      "distinguishes": ["recipe_a", "recipe_b"],
-      "expected_information_gain_reason": "Brief reason why this question should reduce uncertainty."
+      "targets": ["sour cream", "white vinegar", "mayonnaise"],
+      "distinguishes": ["cucumber salad with sour cream", "mizeria"],
+      "expected_information_gain_reason": "These dressings appear in different recipes; naming the ingredient identifies the recipe family."
     }},
     {{
       "rank": 2,
-      "question": "...",
+      "question": "What action are you about to perform next?",
       "question_form": "wh",
-      "targets": ["..."],
-      "distinguishes": ["..."],
-      "expected_information_gain_reason": "..."
+      "targets": ["whisk", "boil", "marinate"],
+      "distinguishes": ["best-ever-cucumber-dill-salad", "moms marinated cucumbers"],
+      "expected_information_gain_reason": "Different recipes use different dressing preparations; the next action narrows the candidates."
     }},
     {{
       "rank": 3,
-      "question": "...",
+      "question": "Which herb or spice will you add?",
       "question_form": "wh",
-      "targets": ["..."],
-      "distinguishes": ["..."],
-      "expected_information_gain_reason": "..."
+      "targets": ["dill", "mint", "celery seed"],
+      "distinguishes": ["best-ever-cucumber-dill-salad", "tomato cucumber salad with mint"],
+      "expected_information_gain_reason": "Each recipe uses a distinctive herb so naming it disambiguates."
     }}
   ]
 }}
