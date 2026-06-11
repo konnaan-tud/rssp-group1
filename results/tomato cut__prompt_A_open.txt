@@ -1,5 +1,0 @@
-Clip: tomato cut
-Prompt: prompt_A_open
-Time: 8.1s
-============================================================
-C cuts the tomato with knife on chopping board
