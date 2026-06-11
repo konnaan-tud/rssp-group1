@@ -1,0 +1,41 @@
+{
+  "recipe_id": "angie_s_dad_s_best_cabbage_coleslaw",
+  "recipe_name": "Angie's Dad's Best Cabbage Coleslaw",
+  "scene_sentences": [
+    "Prepare ingredients for Angie's Dad's Best Cabbage Coleslaw: cabbage, onion, carrot, celery, white sugar, white vinegar, vegetable oil, salt, mustard, black pepper.",
+    "Step 1 of Angie's Dad's Best Cabbage Coleslaw: In a large bowl, combine cabbage, onion, carrots, and celery. Sprinkle with 1 cup sugar, and mix well. In a small saucepan, combine vinegar, oil, salt, dry mustard, and pepper. Bring to a boil. Pour hot dressing over cabbage mixture, and mix well.."
+  ],
+  "all_ingredients": [
+    "cabbage",
+    "onion",
+    "carrot",
+    "celery",
+    "white sugar",
+    "white vinegar",
+    "vegetable oil",
+    "salt",
+    "mustard",
+    "black pepper"
+  ],
+  "metadata": {
+    "source_columns": [
+      "action_sequence",
+      "category",
+      "clean_ingredient_count",
+      "clean_ingredients",
+      "core_ingredient_count",
+      "core_ingredients_for_similarity",
+      "direction_text",
+      "directions",
+      "ingredients",
+      "mean_ingredient_similarity_to_dataset",
+      "mean_process_similarity_to_dataset",
+      "mean_similarity_to_dataset",
+      "normalized_recipe_name",
+      "num_ingredients",
+      "num_steps",
+      "recipe_title",
+      "subcategory"
+    ]
+  }
+}

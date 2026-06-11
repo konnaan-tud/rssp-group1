@@ -1,0 +1,361 @@
+[
+  {
+    "dish": "pomodoro pasta",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook heats olive oil in a saucepan.",
+      "A cook chops onion on a cutting board.",
+      "A cook sautees onion in the saucepan.",
+      "A cook pours jarred tomato sauce into the saucepan.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook tears basil over the sauce.",
+      "A cook drains pasta over the sink.",
+      "A cook tosses pasta with the sauce."
+    ]
+  },
+  {
+    "dish": "marinara pasta",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook chops onion on a cutting board.",
+      "A cook slices garlic on a cutting board.",
+      "A cook heats olive oil in a saucepan.",
+      "A cook sautees onion in the saucepan.",
+      "A cook stirs garlic into the saucepan.",
+      "A cook pours jarred tomato sauce into the saucepan.",
+      "A cook shakes dried oregano into the sauce.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook drains pasta over the sink.",
+      "A cook coats pasta with the sauce."
+    ]
+  },
+  {
+    "dish": "arrabbiata pasta",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook slices garlic on a cutting board.",
+      "A cook heats olive oil in a skillet.",
+      "A cook crushes chili flakes into the skillet.",
+      "A cook stirs garlic into the skillet.",
+      "A cook pours jarred tomato sauce into the skillet.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook simmers the sauce in the skillet.",
+      "A cook drains pasta over the sink.",
+      "A cook tosses pasta with the spicy sauce."
+    ]
+  },
+  {
+    "dish": "puttanesca pasta",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook slices garlic on a cutting board.",
+      "A cook heats olive oil in a skillet.",
+      "A cook adds anchovies to the skillet.",
+      "A cook stirs garlic into the skillet.",
+      "A cook adds olives to the skillet.",
+      "A cook adds capers to the skillet.",
+      "A cook pours jarred tomato sauce into the skillet.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook drains pasta over the sink.",
+      "A cook tosses pasta with the sauce."
+    ]
+  },
+  {
+    "dish": "amatriciana pasta",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook dices pancetta on a cutting board.",
+      "A cook heats a skillet over medium heat.",
+      "A cook cooks pancetta in the skillet.",
+      "A cook crushes chili flakes into the skillet.",
+      "A cook pours jarred tomato sauce into the skillet.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook simmers the sauce in the skillet.",
+      "A cook drains pasta over the sink.",
+      "A cook grates pecorino over the pasta."
+    ]
+  },
+  {
+    "dish": "tuna tomato pasta",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook chops onion on a cutting board.",
+      "A cook heats olive oil in a skillet.",
+      "A cook sautees onion in the skillet.",
+      "A cook pours jarred tomato sauce into the skillet.",
+      "A cook opens a can of tuna at the counter.",
+      "A cook adds tuna to the skillet.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook drains pasta over the sink.",
+      "A cook tosses pasta with the sauce."
+    ]
+  },
+  {
+    "dish": "garlic oil pasta",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook slices garlic on a cutting board.",
+      "A cook pours olive oil into a skillet.",
+      "A cook warms garlic in the skillet.",
+      "A cook sprinkles chili flakes into the skillet.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook ladles pasta water into the skillet.",
+      "A cook drains pasta over the sink.",
+      "A cook transfers pasta into the skillet.",
+      "A cook chops parsley on a cutting board.",
+      "A cook scatters parsley over the pasta."
+    ]
+  },
+  {
+    "dish": "lemon butter pasta",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook grates lemon zest into a bowl.",
+      "A cook squeezes lemon juice into a cup.",
+      "A cook melts butter in a skillet.",
+      "A cook pours lemon juice into the skillet.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook drains pasta over the sink.",
+      "A cook transfers pasta into the skillet.",
+      "A cook sprinkles pre-grated parmesan over the pasta.",
+      "A cook scatters lemon zest over the pasta."
+    ]
+  },
+  {
+    "dish": "butter parmesan pasta",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook melts butter in a skillet.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook ladles pasta water into the skillet.",
+      "A cook drains pasta over the sink.",
+      "A cook transfers pasta into the skillet.",
+      "A cook sprinkles pre-grated parmesan over the pasta.",
+      "A cook tosses pasta in the butter sauce."
+    ]
+  },
+  {
+    "dish": "cacio e pepe",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook grates pecorino into a bowl.",
+      "A cook cracks black pepper into a skillet.",
+      "A cook toasts black pepper in the skillet.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook ladles pasta water into the skillet.",
+      "A cook drains pasta over the sink.",
+      "A cook transfers pasta into the skillet.",
+      "A cook sprinkles pecorino over the pasta.",
+      "A cook stirs the pasta in the skillet."
+    ]
+  },
+  {
+    "dish": "carbonara",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook cracks eggs into a mixing bowl.",
+      "A cook grates pecorino into the mixing bowl.",
+      "A cook dices pancetta on a cutting board.",
+      "A cook cooks pancetta in a skillet.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook drains pasta over the sink.",
+      "A cook transfers pasta into the skillet.",
+      "A cook pours the egg mixture over the pasta.",
+      "A cook stirs the pasta in the skillet."
+    ]
+  },
+  {
+    "dish": "alfredo pasta",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook melts butter in a skillet.",
+      "A cook pours cream into the skillet.",
+      "A cook warms the sauce in the skillet.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook drains pasta over the sink.",
+      "A cook transfers pasta into the skillet.",
+      "A cook sprinkles pre-grated parmesan over the pasta.",
+      "A cook tosses pasta in the cream sauce."
+    ]
+  },
+  {
+    "dish": "vodka sauce pasta",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook chops onion on a cutting board.",
+      "A cook heats olive oil in a skillet.",
+      "A cook sautees onion in the skillet.",
+      "A cook pours jarred tomato sauce into the skillet.",
+      "A cook pours vodka into the skillet.",
+      "A cook stirs cream into the skillet.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook drains pasta over the sink.",
+      "A cook tosses pasta with the pink sauce."
+    ]
+  },
+  {
+    "dish": "mushroom cream pasta",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook slices mushrooms on a cutting board.",
+      "A cook heats butter in a skillet.",
+      "A cook cooks mushrooms in the skillet.",
+      "A cook pours cream into the skillet.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook drains pasta over the sink.",
+      "A cook transfers pasta into the skillet.",
+      "A cook stirs the pasta in the cream sauce."
+    ]
+  },
+  {
+    "dish": "ham and pea pasta",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook chops onion on a cutting board.",
+      "A cook heats butter in a skillet.",
+      "A cook sautees onion in the skillet.",
+      "A cook adds diced ham to the skillet.",
+      "A cook adds frozen peas to the skillet.",
+      "A cook pours cream into the skillet.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook drains pasta over the sink.",
+      "A cook folds pasta into the skillet."
+    ]
+  },
+  {
+    "dish": "pesto pasta",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook toasts pine nuts in a dry pan.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook spoons store-bought pesto into a mixing bowl.",
+      "A cook drains pasta over the sink.",
+      "A cook adds pine nuts to the mixing bowl.",
+      "A cook folds pasta into the pesto.",
+      "A cook sprinkles pre-grated parmesan over the pasta."
+    ]
+  },
+  {
+    "dish": "pea pesto pasta",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook adds frozen peas to a saucepan.",
+      "A cook cooks peas in the saucepan.",
+      "A cook spoons store-bought pesto into a food processor.",
+      "A cook adds peas to the food processor.",
+      "A cook blends the sauce in the food processor.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook drains pasta over the sink.",
+      "A cook folds pasta into the green sauce."
+    ]
+  },
+  {
+    "dish": "spinach pesto pasta",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook adds spinach to a colander.",
+      "A cook rinses spinach under the tap.",
+      "A cook spoons store-bought pesto into a food processor.",
+      "A cook adds spinach to the food processor.",
+      "A cook blends the sauce in the food processor.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook drains pasta over the sink.",
+      "A cook folds pasta into the green sauce."
+    ]
+  },
+  {
+    "dish": "zucchini sauce pasta",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook slices zucchini on a cutting board.",
+      "A cook heats olive oil in a skillet.",
+      "A cook cooks zucchini in the skillet.",
+      "A cook spoons ricotta into the skillet.",
+      "A cook stirs the sauce in the skillet.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook drains pasta over the sink.",
+      "A cook tosses pasta with the zucchini sauce."
+    ]
+  },
+  {
+    "dish": "pea butter pasta",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook melts butter in a skillet.",
+      "A cook adds frozen peas to the skillet.",
+      "A cook cooks peas in the skillet.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook drains pasta over the sink.",
+      "A cook transfers pasta into the skillet.",
+      "A cook sprinkles pre-grated parmesan over the pasta."
+    ]
+  },
+  {
+    "dish": "clam pasta",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook slices garlic on a cutting board.",
+      "A cook heats olive oil in a deep skillet.",
+      "A cook stirs garlic into the deep skillet.",
+      "A cook adds canned clams to the deep skillet.",
+      "A cook pours white wine into the deep skillet.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook simmers the broth in the deep skillet.",
+      "A cook drains pasta over the sink.",
+      "A cook tosses pasta with the clam broth."
+    ]
+  },
+  {
+    "dish": "shrimp garlic pasta",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook slices garlic on a cutting board.",
+      "A cook heats olive oil in a skillet.",
+      "A cook warms garlic in the skillet.",
+      "A cook adds shrimp to the skillet.",
+      "A cook flips shrimp in the skillet.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook drains pasta over the sink.",
+      "A cook tosses pasta with the shrimp."
+    ]
+  },
+  {
+    "dish": "broccoli garlic pasta",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook chops broccoli on a cutting board.",
+      "A cook drops broccoli into boiling water.",
+      "A cook slices garlic on a cutting board.",
+      "A cook heats olive oil in a skillet.",
+      "A cook warms garlic in the skillet.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook drains pasta over the sink.",
+      "A cook adds broccoli to the skillet.",
+      "A cook tosses pasta with the broccoli."
+    ]
+  },
+  {
+    "dish": "gnocchi pomodoro",
+    "scenes": [
+      "A cook heats olive oil in a saucepan.",
+      "A cook chops onion on a cutting board.",
+      "A cook sautees onion in the saucepan.",
+      "A cook pours jarred tomato sauce into the saucepan.",
+      "A cook tears basil over the sauce.",
+      "A cook drops packaged gnocchi into simmering water.",
+      "A cook lifts gnocchi from the pot.",
+      "A cook folds gnocchi into the sauce."
+    ]
+  },
+  {
+    "dish": "gnocchi pesto",
+    "scenes": [
+      "A cook toasts pine nuts in a dry pan.",
+      "A cook spoons store-bought pesto into a mixing bowl.",
+      "A cook drops packaged gnocchi into simmering water.",
+      "A cook lifts gnocchi from the pot.",
+      "A cook adds pine nuts to the mixing bowl.",
+      "A cook folds gnocchi into the pesto."
+    ]
+  }
+]

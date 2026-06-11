@@ -1,0 +1,37 @@
+{
+  "recipe_id": "cucumber_tomato_and_red_onion_salad",
+  "recipe_name": "Cucumber, Tomato, and Red Onion Salad",
+  "scene_sentences": [
+    "Prepare ingredients for Cucumber, Tomato, and Red Onion Salad: tomato, cucumber, onion, coriander, lime, salt.",
+    "Step 1 of Cucumber, Tomato, and Red Onion Salad: Mix tomatoes, cucumbers, red onion, cilantro, and lime juice together in a bowl. Season with salt and serve.."
+  ],
+  "all_ingredients": [
+    "tomato",
+    "cucumber",
+    "onion",
+    "coriander",
+    "lime",
+    "salt"
+  ],
+  "metadata": {
+    "source_columns": [
+      "action_sequence",
+      "category",
+      "clean_ingredient_count",
+      "clean_ingredients",
+      "core_ingredient_count",
+      "core_ingredients_for_similarity",
+      "direction_text",
+      "directions",
+      "ingredients",
+      "mean_ingredient_similarity_to_dataset",
+      "mean_process_similarity_to_dataset",
+      "mean_similarity_to_dataset",
+      "normalized_recipe_name",
+      "num_ingredients",
+      "num_steps",
+      "recipe_title",
+      "subcategory"
+    ]
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "recipe_id": "cucumber_salad",
+  "recipe_name": "Cucumber Salad",
+  "scene_sentences": [
+    "Prepare ingredients for Cucumber Salad: cucumber, onion, white vinegar, white sugar, water, dill.",
+    "Step 1 of Cucumber Salad: Gather the ingredients..",
+    "Step 2 of Cucumber Salad: Toss sliced cucumbers and onion together in a large bowl. Set aside..",
+    "Step 3 of Cucumber Salad: Combine vinegar, sugar, and water in a saucepan over medium-high heat; bring to a boil; pour over cucumbers and onions in the bowl. Stir in dill. Cover and let marinate in the refrigerator for at least 1 hour before serving.."
+  ],
+  "all_ingredients": [
+    "cucumber",
+    "onion",
+    "white vinegar",
+    "white sugar",
+    "water",
+    "dill"
+  ],
+  "metadata": {
+    "source_columns": [
+      "action_sequence",
+      "category",
+      "clean_ingredient_count",
+      "clean_ingredients",
+      "core_ingredient_count",
+      "core_ingredients_for_similarity",
+      "direction_text",
+      "directions",
+      "ingredients",
+      "mean_ingredient_similarity_to_dataset",
+      "mean_process_similarity_to_dataset",
+      "mean_similarity_to_dataset",
+      "normalized_recipe_name",
+      "num_ingredients",
+      "num_steps",
+      "recipe_title",
+      "subcategory"
+    ]
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "recipe_id": "summer_radish_salad",
+  "recipe_name": "Summer Radish Salad",
+  "scene_sentences": [
+    "Prepare ingredients for Summer Radish Salad: radish, salt, onion, cucumber, olive oil, white wine vinegar, dill, garlic, white sugar.",
+    "Step 1 of Summer Radish Salad: Toss radishes with salt; let stand for about 10 minutes. Drain any liquid and transfer radishes to a large bowl; add red onion and cucumber slices..",
+    "Step 2 of Summer Radish Salad: Whisk olive oil, vinegar, dill, garlic, and sugar together in a small bowl until well mixed; pour over vegetables and toss to combine. Cover and refrigerate for at least 1 hour before serving.."
+  ],
+  "all_ingredients": [
+    "radish",
+    "salt",
+    "onion",
+    "cucumber",
+    "olive oil",
+    "white wine vinegar",
+    "dill",
+    "garlic",
+    "white sugar"
+  ],
+  "metadata": {
+    "source_columns": [
+      "action_sequence",
+      "category",
+      "clean_ingredient_count",
+      "clean_ingredients",
+      "core_ingredient_count",
+      "core_ingredients_for_similarity",
+      "direction_text",
+      "directions",
+      "ingredients",
+      "mean_ingredient_similarity_to_dataset",
+      "mean_process_similarity_to_dataset",
+      "mean_similarity_to_dataset",
+      "normalized_recipe_name",
+      "num_ingredients",
+      "num_steps",
+      "recipe_title",
+      "subcategory"
+    ]
+  }
+}

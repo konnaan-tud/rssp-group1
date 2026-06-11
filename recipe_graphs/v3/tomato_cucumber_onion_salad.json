@@ -1,0 +1,38 @@
+{
+  "recipe_id": "tomato_cucumber_onion_salad",
+  "recipe_name": "Tomato Cucumber Onion Salad",
+  "scene_sentences": [
+    "Prepare ingredients for Tomato Cucumber Onion Salad: cucumber, tomato, olive oil, red wine vinegar, onion, white pepper, salt.",
+    "Step 1 of Tomato Cucumber Onion Salad: Toss together cucumber, tomato, olive oil, red wine vinegar, red onion, and white pepper in a large serving bowl; season with salt. Refrigerate until slightly chilled, 10 to 15 minutes.."
+  ],
+  "all_ingredients": [
+    "cucumber",
+    "tomato",
+    "olive oil",
+    "red wine vinegar",
+    "onion",
+    "white pepper",
+    "salt"
+  ],
+  "metadata": {
+    "source_columns": [
+      "action_sequence",
+      "category",
+      "clean_ingredient_count",
+      "clean_ingredients",
+      "core_ingredient_count",
+      "core_ingredients_for_similarity",
+      "direction_text",
+      "directions",
+      "ingredients",
+      "mean_ingredient_similarity_to_dataset",
+      "mean_process_similarity_to_dataset",
+      "mean_similarity_to_dataset",
+      "normalized_recipe_name",
+      "num_ingredients",
+      "num_steps",
+      "recipe_title",
+      "subcategory"
+    ]
+  }
+}

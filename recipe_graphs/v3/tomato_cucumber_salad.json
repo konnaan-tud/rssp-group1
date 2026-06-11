@@ -1,0 +1,38 @@
+{
+  "recipe_id": "tomato_cucumber_salad",
+  "recipe_name": "Tomato Cucumber Salad",
+  "scene_sentences": [
+    "Prepare ingredients for Tomato Cucumber Salad: tomato, cucumber, onion, lemon juice, salt black peper.",
+    "Step 1 of Tomato Cucumber Salad: Gather all ingredients..",
+    "Step 2 of Tomato Cucumber Salad: Combine tomatoes, cucumber, and onion in a salad bowl. Sprinkle with lemon juice and season with salt and black pepper; toss until well combined..",
+    "Step 3 of Tomato Cucumber Salad: Cover and chill salad in the refrigerator until ready to serve.."
+  ],
+  "all_ingredients": [
+    "tomato",
+    "cucumber",
+    "onion",
+    "lemon juice",
+    "salt black peper"
+  ],
+  "metadata": {
+    "source_columns": [
+      "action_sequence",
+      "category",
+      "clean_ingredient_count",
+      "clean_ingredients",
+      "core_ingredient_count",
+      "core_ingredients_for_similarity",
+      "direction_text",
+      "directions",
+      "ingredients",
+      "mean_ingredient_similarity_to_dataset",
+      "mean_process_similarity_to_dataset",
+      "mean_similarity_to_dataset",
+      "normalized_recipe_name",
+      "num_ingredients",
+      "num_steps",
+      "recipe_title",
+      "subcategory"
+    ]
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "recipe_id": "cucumber_tomato_salad",
+  "recipe_name": "Cucumber Tomato Salad",
+  "scene_sentences": [
+    "Prepare ingredients for Cucumber Tomato Salad: water, distilled white vinegar, vegetable oil, sugar, salt, freshly black pepper, cucumber, tomato, onion.",
+    "Step 1 of Cucumber Tomato Salad: Gather all ingredients..",
+    "Step 2 of Cucumber Tomato Salad: Whisk water, vinegar, oil, sugar, salt, and pepper together in a large bowl until smooth..",
+    "Step 3 of Cucumber Tomato Salad: Add cucumbers, tomatoes, and onion and stir to coat..",
+    "Step 4 of Cucumber Tomato Salad: Cover bowl with plastic wrap; refrigerate for at least 2 hours for best flavor results..",
+    "Step 5 of Cucumber Tomato Salad: Enjoy!."
+  ],
+  "all_ingredients": [
+    "water",
+    "distilled white vinegar",
+    "vegetable oil",
+    "sugar",
+    "salt",
+    "freshly black pepper",
+    "cucumber",
+    "tomato",
+    "onion"
+  ],
+  "metadata": {
+    "source_columns": [
+      "action_sequence",
+      "category",
+      "clean_ingredient_count",
+      "clean_ingredients",
+      "core_ingredient_count",
+      "core_ingredients_for_similarity",
+      "direction_text",
+      "directions",
+      "ingredients",
+      "mean_ingredient_similarity_to_dataset",
+      "mean_process_similarity_to_dataset",
+      "mean_similarity_to_dataset",
+      "normalized_recipe_name",
+      "num_ingredients",
+      "num_steps",
+      "recipe_title",
+      "subcategory"
+    ]
+  }
+}

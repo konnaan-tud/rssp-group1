@@ -1,0 +1,37 @@
+{
+  "recipe_id": "sweet_and_tangy_thai_cucumber_salad",
+  "recipe_name": "Sweet and Tangy Thai Cucumber Salad",
+  "scene_sentences": [
+    "Prepare ingredients for Sweet and Tangy Thai Cucumber Salad: white sugar, water, distilled white vinegar, salt, cucumber, onion.",
+    "Step 1 of Sweet and Tangy Thai Cucumber Salad: Whisk sugar, hot water, vinegar, and salt together in a bowl until sugar dissolved; stir in cucumber and onion. Refrigerate at least 1 hour to soften vegetables and reduce onion pungency.."
+  ],
+  "all_ingredients": [
+    "white sugar",
+    "water",
+    "distilled white vinegar",
+    "salt",
+    "cucumber",
+    "onion"
+  ],
+  "metadata": {
+    "source_columns": [
+      "action_sequence",
+      "category",
+      "clean_ingredient_count",
+      "clean_ingredients",
+      "core_ingredient_count",
+      "core_ingredients_for_similarity",
+      "direction_text",
+      "directions",
+      "ingredients",
+      "mean_ingredient_similarity_to_dataset",
+      "mean_process_similarity_to_dataset",
+      "mean_similarity_to_dataset",
+      "normalized_recipe_name",
+      "num_ingredients",
+      "num_steps",
+      "recipe_title",
+      "subcategory"
+    ]
+  }
+}

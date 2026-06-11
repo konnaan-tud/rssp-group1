@@ -1,0 +1,45 @@
+{
+  "recipe_id": "mom_s_best_macaroni_salad",
+  "recipe_name": "Mom's Best Macaroni Salad",
+  "scene_sentences": [
+    "Prepare ingredients for Mom's Best Macaroni Salad: ounc elbow macaroni, carrot, onion, bell pepper, celery, mayonnaise, condensed milk, white sugar, white vinegar, salt pepper.",
+    "Step 1 of Mom's Best Macaroni Salad: Gather all ingredients..",
+    "Step 2 of Mom's Best Macaroni Salad: Bring a large pot of lightly salted water to a boil. Cook elbow macaroni in boiling water, stirring occasionally, until tender yet firm to the bite, about 8 minutes. Rinse under cold water; drain and set aside..",
+    "Step 3 of Mom's Best Macaroni Salad: Stir together carrots, red onion, bell peppers, and celery in a large serving bowl. Mix in mayonnaise, condensed milk, sugar, vinegar, salt, and pepper until well combined..",
+    "Step 4 of Mom's Best Macaroni Salad: Add macaroni; toss gently, then cover and refrigerate for at least 8 hours..",
+    "Step 5 of Mom's Best Macaroni Salad: Enjoy!."
+  ],
+  "all_ingredients": [
+    "ounc elbow macaroni",
+    "carrot",
+    "onion",
+    "bell pepper",
+    "celery",
+    "mayonnaise",
+    "condensed milk",
+    "white sugar",
+    "white vinegar",
+    "salt pepper"
+  ],
+  "metadata": {
+    "source_columns": [
+      "action_sequence",
+      "category",
+      "clean_ingredient_count",
+      "clean_ingredients",
+      "core_ingredient_count",
+      "core_ingredients_for_similarity",
+      "direction_text",
+      "directions",
+      "ingredients",
+      "mean_ingredient_similarity_to_dataset",
+      "mean_process_similarity_to_dataset",
+      "mean_similarity_to_dataset",
+      "normalized_recipe_name",
+      "num_ingredients",
+      "num_steps",
+      "recipe_title",
+      "subcategory"
+    ]
+  }
+}

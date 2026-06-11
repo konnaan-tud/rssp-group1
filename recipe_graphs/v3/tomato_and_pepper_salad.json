@@ -1,0 +1,41 @@
+{
+  "recipe_id": "tomato_and_pepper_salad",
+  "recipe_name": "Tomato and Pepper Salad",
+  "scene_sentences": [
+    "Prepare ingredients for Tomato and Pepper Salad: tomato, cucumber, bell pepper, celery, distilled white vinegar, white sugar, salt, freshly black pepper.",
+    "Step 1 of Tomato and Pepper Salad: Combine tomatoes, cucumber, green bell pepper, and celery in a bowl..",
+    "Step 2 of Tomato and Pepper Salad: Mix vinegar, sugar, salt, and pepper in a separate bowl and pour over salad. Gently toss to coat..",
+    "Step 3 of Tomato and Pepper Salad: Cover and refrigerate at least 2 hours, stirring occasionally.."
+  ],
+  "all_ingredients": [
+    "tomato",
+    "cucumber",
+    "bell pepper",
+    "celery",
+    "distilled white vinegar",
+    "white sugar",
+    "salt",
+    "freshly black pepper"
+  ],
+  "metadata": {
+    "source_columns": [
+      "action_sequence",
+      "category",
+      "clean_ingredient_count",
+      "clean_ingredients",
+      "core_ingredient_count",
+      "core_ingredients_for_similarity",
+      "direction_text",
+      "directions",
+      "ingredients",
+      "mean_ingredient_similarity_to_dataset",
+      "mean_process_similarity_to_dataset",
+      "mean_similarity_to_dataset",
+      "normalized_recipe_name",
+      "num_ingredients",
+      "num_steps",
+      "recipe_title",
+      "subcategory"
+    ]
+  }
+}

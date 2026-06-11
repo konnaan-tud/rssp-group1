@@ -1,0 +1,44 @@
+{
+  "recipe_id": "cucumber_pasta_salad",
+  "recipe_name": "Cucumber Pasta Salad",
+  "scene_sentences": [
+    "Prepare ingredients for Cucumber Pasta Salad: bow tie pasta, cucumber, onion, dill, white vinegar, white sugar, water, vegetable oil, prepared mustard, salt, black pepper.",
+    "Step 1 of Cucumber Pasta Salad: Bring a large pot of lightly salted water to a boil. Cook pasta at a boil, stirring occasionally, until cooked through yet firm to the bite, about 12 minutes. Drain and rinse several times with cold water until pasta is cool..",
+    "Step 2 of Cucumber Pasta Salad: Stir pasta, cucumber, onion, and dill in a salad bowl..",
+    "Step 3 of Cucumber Pasta Salad: Whisk vinegar, sugar, water, vegetable oil, mustard, salt, and black pepper in a separate bowl until sugar and salt have dissolved. Pour dressing over pasta mixture and toss lightly to coat with dressing. Let chill for 2 hours before serving.."
+  ],
+  "all_ingredients": [
+    "bow tie pasta",
+    "cucumber",
+    "onion",
+    "dill",
+    "white vinegar",
+    "white sugar",
+    "water",
+    "vegetable oil",
+    "prepared mustard",
+    "salt",
+    "black pepper"
+  ],
+  "metadata": {
+    "source_columns": [
+      "action_sequence",
+      "category",
+      "clean_ingredient_count",
+      "clean_ingredients",
+      "core_ingredient_count",
+      "core_ingredients_for_similarity",
+      "direction_text",
+      "directions",
+      "ingredients",
+      "mean_ingredient_similarity_to_dataset",
+      "mean_process_similarity_to_dataset",
+      "mean_similarity_to_dataset",
+      "normalized_recipe_name",
+      "num_ingredients",
+      "num_steps",
+      "recipe_title",
+      "subcategory"
+    ]
+  }
+}
