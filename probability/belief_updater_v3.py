@@ -6,13 +6,16 @@ Hybrid similarity belief updater over candidate recipes.
 After each observation clip or clarification answer:
   1. The new sentence is embedded and appended to the observation sequence
   2. Hybrid similarity (F1 + order consistency) computed against each recipe
-  3. Softmax with fixed temperature gives probability distribution
+  3. Contrastive softmax gives probability distribution
   4. Entropy measured — IG_Q captured for clarification answers
 
 Key design decisions:
   - No Bayesian carry-forward: distribution recomputed from scratch each step
+  - Contrastive similarity: raw similarities minus their mean before softmax.
+    Generic scenes that match all recipes equally produce zero contrast and
+    do not move the distribution. Distinctive scenes produce meaningful
+    contrast and drive strong updates.
   - Fixed temperature: principled and easy to justify
-  - Hybrid similarity: F1 scene matching + order consistency bonus
 
 Usage:
     from probability.belief_updater_v3 import BeliefUpdaterV3
@@ -43,22 +46,20 @@ RECIPE_SEQUENCES_PATH = os.path.join("data", "recipe_sequences.json")
 
 class BeliefUpdaterV3:
     """
-    Hybrid similarity belief updater over candidate recipes.
+    Contrastive hybrid similarity belief updater over candidate recipes.
 
     Parameters
     ----------
     recipe_sequences_path : path to data/recipe_sequences.json
-    temperature           : softmax temperature (fixed, lower = sharper)
+    temperature           : softmax temperature (lower = sharper distribution)
     """
 
     def __init__(
         self,
         recipe_sequences_path: str = RECIPE_SEQUENCES_PATH,
         temperature: float = 0.05,
-        n_warmup: int = 3,
     ):
         self.temperature = temperature
-        self.n_warmup = n_warmup
 
         # Load recipe sequences
         with open(recipe_sequences_path, "r", encoding="utf-8") as f:
@@ -91,9 +92,10 @@ class BeliefUpdaterV3:
         self._entropy_before_answer: float | None = None
         self._ig_q_log: list[dict] = []
         self._last_similarities: dict[str, float] = {}
+        self._last_contrastive: dict[str, float] = {}
 
         print(f"[BeliefUpdaterV3] Loaded {self.N} recipes.")
-        print(f"[BeliefUpdaterV3] Temperature: {self.temperature} | Warmup: {self.n_warmup} clips")
+        print(f"[BeliefUpdaterV3] Temperature: {self.temperature}")
 
     # ── Public API ─────────────────────────────────────────────────────────
 
@@ -102,7 +104,7 @@ class BeliefUpdaterV3:
         Process one observation clip.
 
         Embeds the scene sentence, appends to observation sequence,
-        recomputes belief distribution.
+        recomputes belief distribution via contrastive similarity.
 
         Parameters
         ----------
@@ -171,8 +173,12 @@ class BeliefUpdaterV3:
         return list(self._ig_q_log)
 
     def current_similarities(self) -> dict[str, float]:
-        """Raw similarity scores from last update."""
+        """Raw hybrid similarity scores from last update."""
         return dict(self._last_similarities)
+
+    def current_contrastive(self) -> dict[str, float]:
+        """Contrastive similarity scores (raw minus mean) from last update."""
+        return dict(self._last_contrastive)
 
     def reset(self):
         """Reset for a new session."""
@@ -182,6 +188,7 @@ class BeliefUpdaterV3:
         self._entropy_before_answer = None
         self._ig_q_log = []
         self._last_similarities = {}
+        self._last_contrastive = {}
 
     def summary(self) -> dict:
         top, prob = self.top_recipe()
@@ -205,7 +212,6 @@ class BeliefUpdaterV3:
         """
         clone = BeliefUpdaterV3.__new__(BeliefUpdaterV3)
         clone.temperature = self.temperature
-        clone.n_warmup = self.n_warmup
         clone.recipe_sequences = self.recipe_sequences
         clone.recipe_names = self.recipe_names
         clone.N = self.N
@@ -224,6 +230,7 @@ class BeliefUpdaterV3:
         clone._entropy_before_answer = None
         clone._ig_q_log = []
         clone._last_similarities = dict(self._last_similarities)
+        clone._last_contrastive = dict(self._last_contrastive)
         return clone
 
     # ── Internal ───────────────────────────────────────────────────────────
@@ -234,13 +241,17 @@ class BeliefUpdaterV3:
 
         For each recipe:
           1. Compute hybrid similarity (F1 + order consistency)
-          2. Apply softmax with warmup-scaled temperature
-          3. Normalise to probability distribution
+          2. Subtract mean similarity (contrastive normalisation)
+          3. Apply softmax with fixed temperature
+          4. Normalise to probability distribution
 
-        Temperature scaling:
-          effective_T = T / min(1, n / n_warmup)
-          Early observations use higher temperature (less sharp distribution)
-          to avoid over-committing on generic shared scenes.
+        Contrastive normalisation:
+          contrastive_sim(r) = hybrid_sim(r) - mean(hybrid_sim over all recipes)
+
+          When all recipes match equally (generic observation like "pours water"),
+          all contrastive similarities are zero → softmax stays uniform → no update.
+          When one recipe matches distinctively better, its positive contrast
+          drives probability mass toward it.
         """
         obs_seq = self._scene.get_sequence()
 
@@ -258,13 +269,16 @@ class BeliefUpdaterV3:
             for i, name in enumerate(self.recipe_names)
         }
 
-        # Warmup-scaled temperature
-        n = self._scene.current_length()
-        warmup_factor = min(1.0, n / self.n_warmup)
-        effective_T = self.temperature / warmup_factor if warmup_factor > 0 else self.temperature
+        # Contrastive normalisation — subtract mean
+        contrastive = similarities - similarities.mean()
 
-        # Softmax with effective temperature
-        probs = self._softmax(similarities, effective_T)
+        self._last_contrastive = {
+            name: round(float(contrastive[i]), 4)
+            for i, name in enumerate(self.recipe_names)
+        }
+
+        # Softmax with fixed temperature
+        probs = self._softmax(contrastive, self.temperature)
 
         # Build belief dict
         self.belief = {

@@ -10,7 +10,7 @@ Flow:
   Clip 4 → observation only
   Clip 5 → observation only
 
-Questions are chosen to maximise information gain at each point.
+Questions chosen to maximise information gain at each point.
 
 Ground truth: carbonara
 
@@ -40,16 +40,14 @@ CLIPS = [
     "cooks pancetta in a skillet",
 ]
 
-# One question per clip — only for Clips 1 and 2
-# None means no question asked after that clip
 QUESTIONS = [
     {
-        "question": "Are you planning to use eggs in this dish?",
-        "answer": "Yes, I am using eggs as the base of the sauce",
+        "question": "Are you using butter, cream, or olive oil as the base of this dish?",
+        "answer": "No, the fat comes from cured meat and eggs",
     },
     {
-        "question": "Are you adding cured meat like pancetta or guanciale?",
-        "answer": "Yes, I am adding pancetta to the dish",
+        "question": "Are you making a sauce based on eggs?",
+        "answer": "Yes, eggs are the primary binding ingredient in my sauce",
     },
     None,
     None,
@@ -66,31 +64,33 @@ def print_divider(label: str = "", width: int = 60):
 def print_distribution(
     belief: dict[str, float],
     similarities: dict[str, float],
+    contrastive: dict[str, float],
     top_n: int = 8,
 ):
     print()
-    print(f"  {'Recipe':35s}  {'Sim':6s}  {'Prob':6s}  Bar")
-    print(f"  {'─'*35}  {'─'*6}  {'─'*6}  {'─'*25}")
+    print(f"  {'Recipe':35s}  {'Sim':6s}  {'Cont':6s}  {'Prob':6s}  Bar")
+    print(f"  {'─'*35}  {'─'*6}  {'─'*6}  {'─'*6}  {'─'*20}")
     sorted_belief = sorted(belief.items(), key=lambda x: -x[1])
     for name, prob in sorted_belief[:top_n]:
         sim = similarities.get(name, 0.0)
-        bar = "█" * int(prob * 25)
-        print(f"  {name:35s}  {sim:.4f}  {prob:.4f}  {bar}")
+        cont = contrastive.get(name, 0.0)
+        bar = "█" * int(prob * 20)
+        print(f"  {name:35s}  {sim:.4f}  {cont:+.4f}  {prob:.4f}  {bar}")
     if len(sorted_belief) > top_n:
         remaining = sum(p for _, p in sorted_belief[top_n:])
-        print(f"  {'... other recipes':35s}  {'':6s}  {remaining:.4f}")
+        print(f"  {'... other recipes':35s}  {'':6s}  {'':6s}  {remaining:.4f}")
 
 
 # ── Main test ──────────────────────────────────────────────────────────────
 
 def run_test():
-    updater = BeliefUpdaterV3(temperature=0.05, n_warmup=3)
+    updater = BeliefUpdaterV3(temperature=0.05)
 
     print(f"\n{'═'*60}")
-    print(f"  Belief Updater V3 — Targeted Question Test")
+    print(f"  Belief Updater V3 — Contrastive Similarity Test")
     print(f"  Ground truth : {GROUND_TRUTH}")
     print(f"  Recipes      : {updater.N}")
-    print(f"  Temperature  : {updater.temperature} | Warmup: {updater.n_warmup} clips")
+    print(f"  Temperature  : {updater.temperature}")
     print(f"  Max entropy  : {updater.max_entropy():.3f} bits")
     print(f"{'═'*60}")
 
@@ -106,15 +106,16 @@ def run_test():
         ig_obs = entropy_before_obs - entropy_after_obs
 
         print_divider(f"Clip {i}: \"{clip}\"")
-        n = updater._scene.current_length()
-        warmup_factor = min(1.0, n / updater.n_warmup)
-        eff_t = updater.temperature / warmup_factor if warmup_factor > 0 else updater.temperature
         print(f"  H before obs : {entropy_before_obs:.4f} bits")
         print(f"  H after obs  : {entropy_after_obs:.4f} bits")
-        print(f"  IG_obs       : {ig_obs:.4f} bits  |  eff_T : {eff_t:.4f}")
+        print(f"  IG_obs       : {ig_obs:.4f} bits")
         top, prob = updater.top_recipe()
         print(f"  top recipe   : {top} ({prob:.4f})")
-        print_distribution(belief, updater.current_similarities())
+        print_distribution(
+            belief,
+            updater.current_similarities(),
+            updater.current_contrastive(),
+        )
 
         ig_obs_log.append((f"Clip {i}", entropy_after_obs, ig_obs))
 
@@ -134,7 +135,11 @@ def run_test():
             print(f"  IG_Q     : {ig_q:.4f} bits  ← clarification gain")
             top, prob = updater.top_recipe()
             print(f"  top      : {top} ({prob:.4f})")
-            print_distribution(belief, updater.current_similarities())
+            print_distribution(
+                belief,
+                updater.current_similarities(),
+                updater.current_contrastive(),
+            )
 
             ig_q_log_local.append((f"Q{i}", h_after, ig_q, ig_obs))
 
@@ -156,7 +161,7 @@ def run_test():
     print(f"\n  Full IG log:")
     print(f"  {'Step':25s}  {'Type':15s}  {'IG':8s}")
     print(f"  {'─'*25}  {'─'*15}  {'─'*8}")
-    for label, _, ig in [(l, e, i) for l, e, i in ig_obs_log]:
+    for label, _, ig in ig_obs_log:
         print(f"  {label:25s}  {'observation':15s}  {ig:.4f}")
         matching_q = [q for q in ig_q_log_local if q[0] == f"Q{label[-1]}"]
         if matching_q:
