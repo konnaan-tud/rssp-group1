@@ -31,7 +31,7 @@ import re
 
 from belief_updater_v2 import BeliefUpdaterV2
 from questioning_pipeline import (
-    load_static_graphs,
+    build_recipe_context,
     build_question_prompt,
     run_qwen_prompt,
 )
@@ -118,46 +118,104 @@ EIG_THRESHOLD = 0.10         # bits; below this, no question is worth asking
 MAX_QUESTIONS = 9_999        # effectively unlimited (re-enable budget by
                              # restoring the 2 above)
 
-# How many recipes to keep in the VLM prompt. Trimming to active recipes
-# keeps the prompt short and helps Qwen focus on the actual ambiguity.
-ACTIVE_RECIPE_THRESHOLD = 0.02
+# Negation handling — see is_negative_answer() and apply_negation_update()
+# below. When the human answers with a "no" / "not" / "without" sentence,
+# we skip the embedding pipeline (which cannot represent negation) and apply
+# a direct multiplicative penalty to recipes whose vocabulary contains the
+# question's targets.
+NEGATION_PENALTY = 0.10      # multiplier applied to "denied" recipes
 
-# Paths to the real (non-mock) artefacts.
+
+# ─────────────────────────────────────────────────────────────────────────
+# Negation handling
+# ─────────────────────────────────────────────────────────────────────────
+
+# Triggers we treat as "this answer is a denial of the question's targets".
+# Word-boundary matches (we pad the answer with spaces before checking).
+NEGATION_TRIGGERS = (
+    " not ", " no ", " none ", " without ", " neither ",
+    " don't ", " doesn't ", " didn't ", " isn't ", " aren't ", " won't ",
+)
+
+
+def is_negative_answer(answer_text: str) -> bool:
+    """Cheap heuristic: does this answer deny rather than affirm?"""
+    padded = " " + answer_text.lower().strip() + " "
+    return any(trigger in padded for trigger in NEGATION_TRIGGERS)
+
+
+def apply_negation_update(
+    bu: BeliefUpdaterV2,
+    targets: list[str],
+    penalty: float = NEGATION_PENALTY,
+) -> tuple[float, float]:
+    """
+    Direct Bayesian down-weight for "no" answers.
+
+    The question proposed `targets` as candidate answers. The human said
+    none of them apply. Therefore recipes whose vocabulary contains any of
+    those targets are less likely. We multiply their belief by `penalty`,
+    then renormalise.
+
+    We do this DIRECTLY instead of routing through incorporate_answer,
+    because the sentence-embedding pipeline cannot distinguish
+    "I am using sour cream" from "I am NOT using sour cream" — both
+    vectors are *about* sour cream and would both pull the belief in the
+    same direction. The direct multiplicative update encodes the negation
+    correctly.
+
+    Returns (h_before, h_after) so the caller can log IG_Q.
+    """
+    h_before = bu.entropy()
+
+    targets_l = [t.lower().strip() for t in targets if t.strip()]
+    if not targets_l:
+        return h_before, h_before    # nothing to negate
+
+    matched_recipes: list[str] = []
+    for name, rec_terms in bu.recipe_term_vectors.items():
+        contains_any = False
+        for target in targets_l:
+            for term in rec_terms:
+                tl = term.lower()
+                if target in tl or tl in target:
+                    contains_any = True
+                    break
+            if contains_any:
+                break
+        if contains_any:
+            bu.belief[name] *= penalty
+            matched_recipes.append(name)
+
+    # Renormalise
+    total = sum(bu.belief.values())
+    if total > 0:
+        bu.belief = {k: v / total for k, v in bu.belief.items()}
+    else:
+        bu.belief = {k: 1.0 / bu.N for k in bu.recipe_names}
+
+    bu.history.append(dict(bu.belief))
+    h_after = bu.entropy()
+
+    print(f"     [negation] down-weighted {len(matched_recipes)} recipe(s) "
+          f"containing any of {targets_l}:")
+    for name in matched_recipes[:8]:
+        print(f"        - {name}")
+    if len(matched_recipes) > 8:
+        print(f"        ... and {len(matched_recipes) - 8} more")
+
+    return h_before, h_after
+
+# How many recipe candidates the VLM sees in the prompt. Tunes the trade-off
+# between focus (smaller k → sharper prompt) and coverage (larger k → may
+# distinguish more recipes).
+PROMPT_TOP_K = 8
+PROMPT_ACTIVE_THRESHOLD = 0.02
+
+# Path to the V2 vector store. Static recipe graphs are no longer loaded —
+# the canonical recipe representation is the per-term vocabulary inside
+# BeliefUpdaterV2 itself, surfaced via build_recipe_context().
 RECIPE_TERMS_PATH = "recipe_terms.json"
-GRAPH_FOLDER = "recipe_graphs/instruct"
-
-
-# ─────────────────────────────────────────────────────────────────────────
-# VLM input prep
-# ─────────────────────────────────────────────────────────────────────────
-
-def _graph_name(graph: dict) -> str:
-    """Mirror the cleaning rule used by recipe_vectoriser.py."""
-    return graph.get("name", "").replace("_", " ").strip()
-
-
-def trim_to_active_recipes(
-    belief: dict[str, float],
-    static_graphs: list[dict],
-    threshold: float = ACTIVE_RECIPE_THRESHOLD,
-) -> tuple[dict[str, float], list[dict]]:
-    """
-    Drop recipes whose probability is below `threshold` from both the belief
-    snapshot and the static graph list. Keeps the VLM prompt focused on
-    recipes that are actually plausible right now.
-    """
-    active_names = {name for name, p in belief.items() if p >= threshold}
-    if not active_names:                       # safety net — keep top-5
-        active_names = set(
-            sorted(belief, key=belief.get, reverse=True)[:5]
-        )
-    trimmed_belief = {
-        name: round(p, 4) for name, p in belief.items() if name in active_names
-    }
-    trimmed_graphs = [
-        g for g in static_graphs if _graph_name(g) in active_names
-    ]
-    return trimmed_belief, trimmed_graphs
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -218,23 +276,26 @@ def parse_vlm_questions(raw_response: str) -> list[dict]:
     return clean
 
 
-def generate_vlm_questions(
-    belief_updater: BeliefUpdaterV2,
-    static_graphs: list[dict],
-) -> list[dict]:
+def generate_vlm_questions(belief_updater: BeliefUpdaterV2) -> list[dict]:
     """
     Run the full VLM question generation step:
-      1. Trim belief + graphs to active recipes
+      1. Build the recipe context (observed terms + active recipes with
+         remaining vocabulary + flat vocabulary pool) directly from the
+         BeliefUpdaterV2 state — no static graph JSONs involved.
       2. Build the prompt via questioning_pipeline.build_question_prompt
       3. Call Qwen via questioning_pipeline.run_qwen_prompt
       4. Parse the response into the planner's dict format
     """
-    trimmed_belief, trimmed_graphs = trim_to_active_recipes(
-        belief_updater.belief, static_graphs
+    context = build_recipe_context(
+        belief_updater,
+        active_threshold=PROMPT_ACTIVE_THRESHOLD,
+        top_k=PROMPT_TOP_K,
     )
-    print(f"  [VLM] Active recipes in prompt: {len(trimmed_belief)}")
+    n_active = sum(1 for p in belief_updater.belief.values()
+                   if p >= PROMPT_ACTIVE_THRESHOLD)
+    print(f"  [VLM] Active recipes in context: {min(n_active, PROMPT_TOP_K)}")
 
-    prompt = build_question_prompt(trimmed_graphs, trimmed_belief)
+    prompt = build_question_prompt(recipe_context=context)
     print("  [VLM] Calling Qwen (this loads the model on first call)...")
     raw_response = run_qwen_prompt(prompt)
 
@@ -250,14 +311,16 @@ def generate_vlm_questions(
 # Main loop
 # ─────────────────────────────────────────────────────────────────────────
 
+def _norm(text: str) -> str:
+    """Normalise a question string for dedup comparison."""
+    return " ".join(text.lower().split()).rstrip("?.! ")
+
+
 def main():
     bu = BeliefUpdaterV2(recipe_terms_path=RECIPE_TERMS_PATH)
 
-    # Static graphs are loaded lazily on the first VLM call (saves time if
-    # we never end up asking).
-    static_graphs: list[dict] | None = None
-
     questions_asked = 0
+    asked_question_texts: set[str] = set()    # track questions already used
     print(f"\nMax entropy: {bu.max_entropy():.3f} bits")
 
     for w in WINDOWS:
@@ -279,31 +342,57 @@ def main():
             print("  [gate] Belief is sharp enough — skipping.")
             continue
 
-        # 3. EXPENSIVE step — generate candidate questions with the VLM.
-        if static_graphs is None:
-            print("  [setup] Loading static recipe graphs...")
-            static_graphs = load_static_graphs(GRAPH_FOLDER)
-
-        questions = generate_vlm_questions(bu, static_graphs)
+        # 3. EXPENSIVE step — generate candidate questions with the VLM,
+        # passing it the V2-native context (active recipes + remaining
+        # vocabulary) instead of raw static graphs.
+        questions = generate_vlm_questions(bu)
         if not questions:
             print("  [gate] No usable questions from VLM — skipping.")
             continue
+
+        # Repeat-question filter is DISABLED for now (it felt too hard-coded).
+        # If you want it back, uncomment the block below and remove the
+        # `fresh_questions = questions` line.
+        #
+        # fresh_questions = [
+        #     q for q in questions
+        #     if _norm(q["question"]) not in asked_question_texts
+        # ]
+        # n_dropped = len(questions) - len(fresh_questions)
+        # if n_dropped:
+        #     print(f"  [filter] Dropped {n_dropped} repeat question(s).")
+        # if not fresh_questions:
+        #     print("  [gate] All VLM questions are repeats — skipping.")
+        #     continue
+        fresh_questions = questions
 
         # 4. Score with the planner. We pass entropy_threshold=0.0 here
         # because we already vetted entropy above; this call only enforces
         # the EIG threshold and the budget.
         ask, best_q, ranked = should_ask(
             belief_updater=bu,
-            questions=questions,
+            questions=fresh_questions,
             entropy_threshold=0.0,
             eig_threshold=EIG_THRESHOLD,
             questions_asked=questions_asked,
             max_questions=MAX_QUESTIONS,
         )
 
-        print("\n  candidate EIGs:")
+        # Per-branch EIG breakdown — for each candidate question, show what
+        # each top-k recipe is hypothesised to answer and how much entropy
+        # would drop in that branch. This makes the selection transparent.
+        print("\n  candidate questions (with EIG breakdown):")
         for q in ranked:
-            print(f"    [{q['measured_eig']:.3f}]  {q['question']}")
+            print(f"    [{q['measured_eig']:.3f} bits]  {q['question']}")
+            for b in q["branches"]:
+                if b["answer"] is None:
+                    print(f"        ↳ {b['recipe']:<35} (p={b['p']:.3f})  "
+                          f"no useful sim answer")
+                    continue
+                contribution = b["p"] * b["delta_h"]
+                print(f"        ↳ {b['recipe']:<35} (p={b['p']:.3f})  "
+                      f"sim → {b['answer']!r:<25}  "
+                      f"ΔH={b['delta_h']:+.3f}  contrib={contribution:+.3f}")
 
         if not ask:
             print("  [gate] Best EIG below threshold — skipping.")
@@ -318,14 +407,33 @@ def main():
         print(f"     human    : {answer}")
         print(f"     predicted EIG : {best_q['measured_eig']:.4f} bits")
 
-        h_before = bu.entropy()
-        bu.incorporate_answer(answer)
-        h_after = bu.entropy()
+        # Negation answers go through the direct down-weight, NOT through
+        # the embedding pipeline (which can't represent "not").
+        if is_negative_answer(answer):
+            h_before, h_after = apply_negation_update(
+                bu,
+                targets=best_q.get("targets", []),
+                penalty=NEGATION_PENALTY,
+            )
+            # Log to ig_q_history so it appears in the final summary
+            bu._ig_q_history.append({
+                "answer": answer,
+                "extracted_terms": [],
+                "negation_targets": best_q.get("targets", []),
+                "entropy_before": round(h_before, 4),
+                "entropy_after": round(h_after, 4),
+                "ig_q": round(h_before - h_after, 4),
+            })
+        else:
+            h_before = bu.entropy()
+            bu.incorporate_answer(answer)
+            h_after = bu.entropy()
         realised = h_before - h_after
 
         print(f"     realised IG_Q : {realised:.4f} bits "
               f"(Δ vs predicted: {realised - best_q['measured_eig']:+.4f})")
         questions_asked += 1
+        # asked_question_texts.add(_norm(best_q["question"]))  # filter disabled
 
     # Final report
     top, p = bu.top_recipe()

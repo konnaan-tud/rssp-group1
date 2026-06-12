@@ -30,16 +30,111 @@ def load_static_graphs(graph_folder: str | Path) -> list[dict]:
     return graphs
 
 
-def build_question_prompt(
-    static_graphs: list[dict],
-    belief_state: dict[str, float],
+def build_recipe_context(
+    belief_updater,                       # BeliefUpdaterV2 (duck-typed to avoid circular import)
+    active_threshold: float = 0.02,
+    top_k: int = 8,
 ) -> str:
     """
-    Build the prompt that asks the VLM to generate clarification questions.
-    """
+    Build a compact text summary of session state for the VLM prompt.
 
-    static_graphs_json = json.dumps(static_graphs, indent=2, ensure_ascii=False)
-    belief_state_json = json.dumps(belief_state, indent=2, ensure_ascii=False)
+    Replaces the old "dump every recipe graph JSON" approach. In V2 the
+    canonical recipe representation is the per-term vocabulary inside
+    BeliefUpdaterV2, so we draw the context directly from there.
+
+    The returned block contains three sections:
+      1. ALREADY OBSERVED — terms the VLM should not ask about
+      2. ACTIVE CANDIDATES — top recipes with their REMAINING vocabulary
+         (these are the strings the VLM should draw targets from)
+      3. VOCABULARY POOL — flat list of every remaining term across the
+         active candidates, as a final guard for the targets rule.
+
+    Parameters
+    ----------
+    belief_updater   : a BeliefUpdaterV2 instance
+    active_threshold : recipes with P(r) below this are dropped from context
+    top_k            : hard upper bound on number of candidates listed
+    """
+    bel = belief_updater.belief
+
+    # 1. Pick the candidates to surface
+    active = [(name, p) for name, p in bel.items() if p >= active_threshold]
+    active.sort(key=lambda x: -x[1])
+    if len(active) > top_k:
+        active = active[:top_k]
+    if not active:                                # safety net
+        active = sorted(bel.items(), key=lambda x: -x[1])[:top_k]
+
+    # 2. Already-observed terms (drawn from the belief updater directly)
+    obs_terms = sorted(belief_updater._obs_terms.keys())
+    obs_set = set(obs_terms)
+
+    # 3. Per-recipe remaining vocabulary
+    unseen_by_recipe: dict[str, list[str]] = {}
+    for name, _p in active:
+        rec_terms = belief_updater.recipe_term_vectors[name]
+        unseen_by_recipe[name] = sorted(
+            t for t in rec_terms if t not in obs_set
+        )
+
+    # 4. Compose the text block
+    lines: list[str] = []
+
+    # 4a. Belief distribution up front — this is what the VLM should reason
+    # about. High-entropy belief = ask broad questions; sharp belief = ask
+    # questions that distinguish the top recipes only.
+    import math
+    H = -sum(p * math.log2(p) for _, p in active if p > 0)
+    Hmax = math.log2(len(bel)) if len(bel) > 1 else 0.0
+    lines.append("CURRENT BELIEF DISTRIBUTION (sorted by probability):")
+    for name, p in active:
+        bar = "█" * int(round(p * 30))
+        lines.append(f"  {p:.3f}  {bar:<30}  {name}")
+    lines.append(f"  entropy: {H:.3f} bits over {len(active)} active recipes "
+                 f"(max possible: {Hmax:.3f} bits)")
+    lines.append("")
+
+    lines.append("ALREADY OBSERVED (do not ask about these):")
+    if obs_terms:
+        lines.append("  " + ", ".join(obs_terms))
+    else:
+        lines.append("  (nothing observed yet)")
+    lines.append("")
+
+    lines.append("ACTIVE CANDIDATE RECIPES")
+    lines.append("(Each recipe lists its current probability and its "
+                 "REMAINING vocabulary — the ingredients and actions still")
+    lines.append("unseen for that recipe. These remaining terms are the "
+                 "strings you should draw your 'targets' from.)")
+    lines.append("")
+    for name, p in active:
+        lines.append(f"- {name}  (p={p:.3f})")
+        unseen = unseen_by_recipe[name]
+        if unseen:
+            lines.append(f"    remaining: {', '.join(unseen)}")
+        else:
+            lines.append(f"    remaining: (all terms already observed)")
+    lines.append("")
+
+    # 5. Flat pool — every term you may use as a target
+    pool = sorted({t for terms in unseen_by_recipe.values() for t in terms})
+    lines.append("VOCABULARY POOL (every concrete string you may use as a "
+                 "target — do NOT invent anything outside this list):")
+    lines.append("  " + (", ".join(pool) if pool else "(empty)"))
+
+    return "\n".join(lines)
+
+
+def build_question_prompt(recipe_context: str) -> str:
+    """
+    Build the prompt that asks the VLM to generate clarification questions.
+
+    The `recipe_context` argument is a text block produced by
+    build_recipe_context() — it contains the active candidates, their
+    remaining vocabulary, and the already-observed terms. This replaces the
+    earlier "dump full static_graphs JSON" approach, which was a V1 leftover
+    that didn't match V2's bag-of-terms recipe representation.
+    """
 
     prompt = f"""
 You are a clarification-question planner for a VLM-based cooking observer.
@@ -54,28 +149,32 @@ over the current recipe belief state as much as possible.
 ═══ HOW TO FILL "targets" — READ CAREFULLY ═══
 
 The "targets" field is the most important part of each question. It is the
-list of CONCRETE WORDS OR PHRASES that the human's answer might contain —
-actual ingredient names or action names drawn from the recipe vocabulary.
+list of CONCRETE possible answers the human might give — actual ingredient
+names or action names that distinguish the candidate recipes from each
+other.
 
 A downstream planner uses these targets to test whether the question would
-actually distinguish between recipes. Abstract placeholder names CANNOT be
-matched against any recipe and make the question useless.
+actually distinguish between recipes. Abstract placeholder names and
+generic cooking terms CANNOT be matched against any recipe and make the
+question useless.
 
-GOOD targets (concrete ingredients or actions from the recipes below):
-    "targets": ["sour cream", "white vinegar", "mayonnaise"]
-    "targets": ["whisk", "boil", "stir"]
-    "targets": ["dill", "celery seed", "mint"]
+GOOD targets — concrete strings drawn from the VOCABULARY POOL of the
+current session (each example below uses a different food domain to show
+the general shape):
+    "targets": ["miso", "soy sauce", "fish sauce"]      ← Asian sauces
+    "targets": ["bake", "fry", "grill"]                  ← cooking methods
+    "targets": ["basil", "oregano", "rosemary"]          ← Mediterranean herbs
 
 BAD targets (NEVER produce these — they cannot be matched):
-    "targets": ["main_ingredient"]
-    "targets": ["stage_id"]
-    "targets": ["next_action"]
-    "targets": ["first_step"]
-    "targets": ["ingredient or action being tested"]
+    "targets": ["main_ingredient"]                       ← abstract placeholder
+    "targets": ["stage_id"]                              ← schema field name
+    "targets": ["next_action"]                           ← abstract placeholder
+    "targets": ["first_step"]                            ← abstract placeholder
+    "targets": ["ingredient or action being tested"]     ← description, not a value
 
 Every string in "targets" must appear — in the same or very similar form —
-in the "all_ingredients" or "actions" fields of one of the recipe graphs
-shown below.
+in the VOCABULARY POOL listed in the SESSION CONTEXT below. Do NOT make up
+new strings, do NOT copy example targets verbatim.
 
 ═══ FORMAT ═══
 
@@ -94,50 +193,58 @@ Each question must begin with one of: what, which, where, when, why, how.
 
 Rank from best to worst by expected information gain.
 
-═══ CURRENT BELIEF STATE ═══
-{belief_state_json}
+═══ SESSION CONTEXT ═══
+{recipe_context}
 
-═══ STATIC RECIPE GRAPHS ═══
-(These are the only candidate recipes. Draw your targets from the
-ingredients and actions listed here.)
+═══ RESPONSE FORMAT ═══
 
-{static_graphs_json}
+Return ONLY valid JSON in the structure shown below.
 
-═══ RESPONSE ═══
+★ CRITICAL ★
+The examples below are from a DIFFERENT cooking domain (Asian stir-fry).
+They illustrate the *structure* only — they are NOT valid answers for the
+current session. You MUST:
+  - Rewrite every question so it fits the recipes in the SESSION CONTEXT.
+  - Replace every target with concrete vocabulary from the VOCABULARY POOL.
+  - Replace every "distinguishes" entry with names of ACTIVE CANDIDATE
+    recipes from the SESSION CONTEXT.
 
-Return ONLY valid JSON in the format below. The examples use concrete
-vocabulary — replace them with concrete vocabulary drawn from the recipes
-above. DO NOT keep the schema-style placeholders like "stage_id" or
-"main_ingredient".
+DO NOT copy the example targets ("tofu", "ginger", "soy sauce", etc.). They
+do not appear in the current recipes and will be discarded by the planner.
 
+EXAMPLE STRUCTURE (Asian stir-fry domain — do NOT reuse these values):
 {{
   "questions": [
     {{
       "rank": 1,
-      "question": "Which ingredient are you adding to the dressing?",
+      "question": "Which protein are you adding to the wok?",
       "question_form": "wh",
-      "targets": ["sour cream", "white vinegar", "mayonnaise"],
-      "distinguishes": ["cucumber salad with sour cream", "mizeria"],
-      "expected_information_gain_reason": "These dressings appear in different recipes; naming the ingredient identifies the recipe family."
+      "targets": ["tofu", "chicken", "shrimp"],
+      "distinguishes": ["vegetarian pad thai", "kung pao chicken"],
+      "expected_information_gain_reason": "Different stir-fries use different proteins; naming it identifies the dish family."
     }},
     {{
       "rank": 2,
-      "question": "What action are you about to perform next?",
+      "question": "Which aromatic are you frying first?",
       "question_form": "wh",
-      "targets": ["whisk", "boil", "marinate"],
-      "distinguishes": ["best-ever-cucumber-dill-salad", "moms marinated cucumbers"],
-      "expected_information_gain_reason": "Different recipes use different dressing preparations; the next action narrows the candidates."
+      "targets": ["ginger", "garlic", "lemongrass"],
+      "distinguishes": ["thai green curry", "vietnamese pho"],
+      "expected_information_gain_reason": "Different cuisines start with different aromatics; this disambiguates the recipe family."
     }},
     {{
       "rank": 3,
-      "question": "Which herb or spice will you add?",
+      "question": "What sauce base will you use?",
       "question_form": "wh",
-      "targets": ["dill", "mint", "celery seed"],
-      "distinguishes": ["best-ever-cucumber-dill-salad", "tomato cucumber salad with mint"],
-      "expected_information_gain_reason": "Each recipe uses a distinctive herb so naming it disambiguates."
+      "targets": ["soy sauce", "fish sauce", "oyster sauce"],
+      "distinguishes": ["thai basil chicken", "general tso's chicken"],
+      "expected_information_gain_reason": "Each sauce maps to a different dish family."
     }}
   ]
 }}
+
+Now produce YOUR JSON for the current SESSION CONTEXT. Remember: targets
+MUST be drawn from the VOCABULARY POOL above. Do not invent new strings,
+do not reuse the example targets.
 """
 
     return prompt.strip()
@@ -216,26 +323,19 @@ def run_qwen_prompt(
 
 
 if __name__ == "__main__":
-    graph_folder = "recipe_graphs/instruct"
+    # Smoke test: build a context from a real BeliefUpdaterV2 instance and
+    # show the prompt that would be sent. We don't actually call Qwen here
+    # (that takes ~30 s); pipe through orchestrator_v2_vlm.py for an end-to-end run.
+    from belief_updater_v2 import BeliefUpdaterV2
 
-    # replace with actual belief state json
+    bu = BeliefUpdaterV2(recipe_terms_path="recipe_terms.json")
+    bu.update(ingredients_seen=["cucumber", "onion"],
+              actions_seen=["slice", "chop"])
 
-    belief_state = {
-        "cucumber salad": 0.34,
-        "mizeria": 0.33,
-        "mom_s_marinated_cucumbers": 0.33,
-    }
+    context = build_recipe_context(bu)
+    print("\n----- Recipe context -----\n")
+    print(context)
 
-    # Replace with actual path to recipe graph JSON files
-
-    static_graphs = load_static_graphs(graph_folder)
-
-    prompt = build_question_prompt(
-        static_graphs=static_graphs,
-        belief_state=belief_state,
-    )
-
-    response = run_qwen_prompt(prompt)
-
-    print("\n----- Qwen response -----\n")
-    print(response)
+    prompt = build_question_prompt(recipe_context=context)
+    print("\n----- Full prompt -----\n")
+    print(prompt)
