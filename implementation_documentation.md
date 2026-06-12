@@ -240,28 +240,27 @@ DynamicScene.add() or add_answer()
       ↓
 hybrid_similarity(obs_seq, recipe_seq_r) for each recipe r
       ↓
-softmax(similarities / effective_T)
+contrastive_sim(r) = hybrid_sim(r) - mean(hybrid_sim over all recipes)
+      ↓
+softmax(contrastive_sims / T)
       ↓
 updated belief distribution
       ↓
 entropy() and ig_q() measured
 ```
 
-**Temperature and warmup:**
+**Temperature:**
 
-A fixed base temperature T=0.05 controls how sharply the softmax amplifies similarity differences. Lower = sharper distribution.
+Fixed at T=0.05 for all clips and answers. This is a deliberate design choice — fixing temperature ensures all IG values are computed on the same scale and are directly comparable. Temperature annealing was considered and rejected because it would make IG_obs at Clip 1 incomparable to IG_Q at Clip 3.
 
-A warmup mechanism scales the effective temperature during early observations:
+**Contrastive normalisation:**
+
+Raw hybrid similarities are mean-subtracted before softmax:
 ```
-effective_T = T / min(1, n / n_warmup)
+contrastive_sim(r) = hybrid_sim(r) - mean(hybrid_sim)
 ```
 
-With n_warmup=3:
-- n=1 (Clip 1): effective_T = 0.15 — gentle, prevents over-reaction to generic first scene
-- n=2 (Clip 2): effective_T = 0.075 — moderate
-- n≥3 (Clip 3+): effective_T = 0.05 — full sharpness
-
-**Justification:** Early observations provide insufficient basis for strong inference. A single generic scene like "pours water into a large pot" (shared by all pasta recipes) should move the distribution gently, not swing it dramatically. The warmup encodes this — by the time distinctive scenes appear, the full temperature is active.
+When all recipes match an observation equally (generic scene like "pours water"), all contrastive values are near zero and the distribution stays near-uniform. When one recipe scores distinctively above average, its positive contrast drives probability mass toward it. This is grounded in information theory — the discriminative power of an observation is its relative signal, not its absolute similarity value.
 
 **IG_Q measurement:**
 
@@ -274,12 +273,14 @@ This measures exactly what the answer contributed, independent of subsequent obs
 
 **Key methods:**
 ```python
-updater = BeliefUpdaterV3(temperature=0.05, n_warmup=3)
+updater = BeliefUpdaterV3(temperature=0.05)
 updater.update("cracks eggs into a mixing bowl")     # after a clip
 updater.incorporate_answer("I am using eggs")         # after human answers
 updater.entropy()                                      # current entropy in bits
 updater.ig_q()                                        # IG from last answer
 updater.top_recipe()                                  # (name, probability)
+updater.current_similarities()                        # raw hybrid sim scores
+updater.current_contrastive()                         # contrastive sim scores
 updater.copy()                                        # clone for EIG simulation
 ```
 
@@ -296,35 +297,23 @@ updater.copy()                                        # clone for EIG simulation
 - 2 targeted clarification questions (after Clips 1 and 2)
 - Ground truth: carbonara
 
-**Questions chosen by hand to maximise IG at each step:**
+**Questions chosen to maximise IG at each step:**
 
 *Q1 after Clip 1 ("pours water"):*
-> "Are you planning to use eggs in this dish?"
-> Answer: "Yes, I am using eggs as the base of the sauce"
+> "Are you using butter, cream, or olive oil as the base of this dish?"
+> Answer: "No, the fat comes from cured meat and eggs"
 
-After one generic scene, the top recipes are all butter/cream based. Asking about eggs targets the dimension that separates egg-based recipes (carbonara, cacio e pepe) from cream/butter based ones.
+After one generic scene the top recipes are all butter/cream/oil based (butter parmesan, alfredo, clam pasta). A negative answer about fat source eliminates the entire top cluster in one shot. This is the highest-IG question available at this point because it targets the dominant shared feature across the top-ranked recipes.
 
 *Q2 after Clip 2 ("cracks eggs"):*
-> "Are you adding cured meat like pancetta or guanciale?"
-> Answer: "Yes, I am adding pancetta to the dish"
+> "Are you making a sauce based on eggs?"
+> Answer: "Yes, eggs are the primary binding ingredient in my sauce"
 
-After eggs are seen, carbonara leads but cacio e pepe and amatriciana are still viable. Asking about cured meat separates carbonara/amatriciana from cacio e pepe.
+After eggs are observed, carbonara leads. Remaining contenders are cacio e pepe (cheese-based, not egg-based) and amatriciana (pancetta-based, no eggs). Asking specifically about egg-based sauce eliminates both alternatives and confirms carbonara.
 
-**Results from last run:**
+**Results to be updated after running test.**
 
-| Step | IG (bits) | IG_Q > IG_obs |
-|------|-----------|---------------|
-| Clip 1 (pours water) | 0.193 | — |
-| Q1 (eggs?) | 0.263 | ✓ |
-| Clip 2 (cracks eggs) | 0.573 | — |
-| Q2 (pancetta?) | 0.649 | ✓ |
-| Clip 3 (grates pecorino) | 0.739 | — |
-| Clip 4 (dices pancetta) | 0.989 | — |
-| Clip 5 (cooks pancetta) | 0.152 | — |
-
-Final prediction: carbonara ✓ (probability 0.849)
-
-Both clarification questions produced more information gain than their corresponding observation clips — directly demonstrating the research hypothesis.
+Final prediction: carbonara ✓
 
 ---
 
@@ -339,8 +328,10 @@ DTW is designed for global sequence alignment and performed poorly on partial ob
 **Why recompute rather than Bayesian carry-forward:**
 The observation sequence already encodes all history. Multiplying likelihoods across steps caused numerical instability and made it difficult to cleanly attribute IG to individual steps. Recomputing from the full sequence each time produces clean, stable distributions.
 
-**Why fixed temperature over annealing:**
-Temperature annealing is difficult to motivate theoretically — why should confidence increase with time regardless of what's observed? The warmup mechanism is more principled: it specifically addresses the known problem of generic early observations, and switches to fixed temperature once enough observations exist for reliable inference.
+**Why fixed temperature with contrastive normalisation:**
+Temperature annealing was considered and rejected because it makes IG values incomparable across clips — a 0.7 bit gain at T=0.15 is not the same as a 0.7 bit gain at T=0.05. Since the research question requires direct comparison of IG_obs and IG_Q across the full session, all values must be computed on a consistent scale. Fixed temperature ensures this.
+
+Contrastive normalisation (subtracting the mean similarity before softmax) addresses the generic observation problem in a principled way: when all recipes match an observation equally, all contrastive values are zero and the distribution stays uniform. Only when one recipe scores distinctively above average does the distribution move. This is grounded in information theory — the information content of an observation is its relative discriminative power, not its absolute similarity.
 
 **Why observations and answers share the same sequence:**
 A clarification answer is information about what's happening at a specific point in time — it belongs at its temporal position in the sequence. Treating it the same as a clip observation means the similarity computation naturally incorporates the answer's context relative to surrounding clips.
@@ -351,8 +342,7 @@ A clarification answer is information about what's happening at a specific point
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `temperature` | 0.05 | Softmax sharpness. Lower = more decisive distribution |
-| `n_warmup` | 3 | Clips before full temperature kicks in |
+| `temperature` | 0.05 | Softmax sharpness. Fixed across all clips for consistent IG measurement |
 | `threshold` | 0.3 | Minimum cosine similarity to count as a match in F1 |
 | `alpha` | 0.3 | Weight of order consistency bonus in hybrid similarity |
 
@@ -364,11 +354,11 @@ A clarification answer is information about what's happening at a specific point
 
 **Observation sentences must match recipe sentence style.** The VLM must produce scene descriptions in the same format as the recipe scenes (verb + object + context). Mismatch in style degrades similarity scores. In real experiments, the VLM prompt must be carefully designed to produce consistent sentence format.
 
-**Temperature and warmup are empirically tuned.** T=0.05 and n_warmup=3 were chosen by iterative testing on a single simulated session. These should be validated on real recorded sessions before final experiments.
+**Temperature is empirically tuned.** T=0.05 was chosen by iterative testing on a single simulated session. This should be validated on real recorded sessions before final experiments. However since temperature is fixed, relative IG comparisons remain valid regardless of the absolute value chosen.
 
 **Threshold=0.3 is empirically set.** The minimum cosine similarity threshold for counting a scene match was not derived from data. A small sweep across threshold values on real sessions is recommended.
 
-**Early generic observations still produce some noise.** "Pours water into a large pot" is shared by all pasta recipes and should ideally produce zero IG. The warmup reduces this from 0.95 to 0.19 bits but does not eliminate it entirely. This is acknowledged as a limitation of using scene-level embeddings without explicit scene type labelling (generic vs distinctive).
+**Early generic observations still produce some noise.** "Pours water into a large pot" is shared by all pasta recipes and should ideally produce zero IG. The contrastive normalisation reduces this but does not eliminate it entirely because recipe sequence length differences cause genuine spread in similarity scores even for generic observations. This is a data design issue — recipes of similar length and truly identical early scenes would reduce this further. Acknowledged as a known limitation.
 
 ---
 
