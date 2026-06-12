@@ -3,13 +3,14 @@ probability/test_belief_v3.py
 ------------------------------
 Tests BeliefUpdaterV3 with a simulated carbonara cooking session.
 
-Session:
-  Clip 1: "pours water into a large pot"          → shared, ambiguous
-  Clip 2: "cracks eggs into a mixing bowl"        → somewhat distinctive
-  --- clarification answer after clip 2 ---
-  Clip 3: "grates pecorino into the mixing bowl"  → distinctive
-  Clip 4: "dices pancetta on a cutting board"     → confirms carbonara
-  Clip 5: "cooks pancetta in a skillet"           → strong confirmation
+Flow:
+  Clip 1 → observation → one targeted question → answer
+  Clip 2 → observation → one targeted question → answer
+  Clip 3 → observation only
+  Clip 4 → observation only
+  Clip 5 → observation only
+
+Questions are chosen to maximise information gain at each point.
 
 Ground truth: carbonara
 
@@ -39,64 +40,92 @@ CLIPS = [
     "cooks pancetta in a skillet",
 ]
 
-CLARIFICATION_ANSWER = "I am adding eggs and pecorino to make a creamy sauce"
-ANSWER_AFTER_CLIP = 2  # fire answer after this clip number (1-indexed)
+# One question per clip — only for Clips 1 and 2
+# None means no question asked after that clip
+QUESTIONS = [
+    {
+        "question": "Are you planning to use eggs in this dish?",
+        "answer": "Yes, I am using eggs as the base of the sauce",
+    },
+    {
+        "question": "Are you adding cured meat like pancetta or guanciale?",
+        "answer": "Yes, I am adding pancetta to the dish",
+    },
+    None,
+    None,
+    None,
+]
 
 
 # ── Display helpers ────────────────────────────────────────────────────────
 
-def print_divider(label: str):
-    print(f"\n── {label} {'─' * max(1, 54 - len(label))}")
+def print_divider(label: str = "", width: int = 60):
+    print(f"\n── {label} {'─' * max(1, width - len(label) - 4)}")
 
 
-def print_distribution(belief: dict[str, float], similarities: dict[str, float]):
-    """Print belief and similarity scores side by side, sorted by belief."""
+def print_distribution(
+    belief: dict[str, float],
+    similarities: dict[str, float],
+    top_n: int = 8,
+):
     print()
     print(f"  {'Recipe':35s}  {'Sim':6s}  {'Prob':6s}  Bar")
-    print(f"  {'─'*35}  {'─'*6}  {'─'*6}  {'─'*30}")
-    for name, prob in sorted(belief.items(), key=lambda x: -x[1]):
+    print(f"  {'─'*35}  {'─'*6}  {'─'*6}  {'─'*25}")
+    sorted_belief = sorted(belief.items(), key=lambda x: -x[1])
+    for name, prob in sorted_belief[:top_n]:
         sim = similarities.get(name, 0.0)
-        bar = "█" * int(prob * 30)
+        bar = "█" * int(prob * 25)
         print(f"  {name:35s}  {sim:.4f}  {prob:.4f}  {bar}")
+    if len(sorted_belief) > top_n:
+        remaining = sum(p for _, p in sorted_belief[top_n:])
+        print(f"  {'... other recipes':35s}  {'':6s}  {remaining:.4f}")
 
 
 # ── Main test ──────────────────────────────────────────────────────────────
 
 def run_test():
-    updater = BeliefUpdaterV3(temperature=0.01)
+    updater = BeliefUpdaterV3(temperature=0.05, n_warmup=3)
 
     print(f"\n{'═'*60}")
-    print(f"  Belief Updater V3 — DTW Test")
+    print(f"  Belief Updater V3 — Targeted Question Test")
     print(f"  Ground truth : {GROUND_TRUTH}")
     print(f"  Recipes      : {updater.N}")
+    print(f"  Temperature  : {updater.temperature} | Warmup: {updater.n_warmup} clips")
     print(f"  Max entropy  : {updater.max_entropy():.3f} bits")
     print(f"{'═'*60}")
 
-    entropy_log = []  # (label, entropy, ig)
+    ig_obs_log = []
+    ig_q_log_local = []
 
-    for i, clip in enumerate(CLIPS, start=1):
-        entropy_before = updater.entropy()
+    for i, (clip, qa) in enumerate(zip(CLIPS, QUESTIONS), start=1):
 
-        # Update from observation
+        # ── Observation ────────────────────────────────────────────────────
+        entropy_before_obs = updater.entropy()
         belief = updater.update(clip)
-        entropy_after = updater.entropy()
-        ig_obs = entropy_before - entropy_after
+        entropy_after_obs = updater.entropy()
+        ig_obs = entropy_before_obs - entropy_after_obs
 
         print_divider(f"Clip {i}: \"{clip}\"")
-        print(f"  entropy : {entropy_after:.4f} bits  |  IG_obs : {ig_obs:.4f} bits")
+        n = updater._scene.current_length()
+        warmup_factor = min(1.0, n / updater.n_warmup)
+        eff_t = updater.temperature / warmup_factor if warmup_factor > 0 else updater.temperature
+        print(f"  H before obs : {entropy_before_obs:.4f} bits")
+        print(f"  H after obs  : {entropy_after_obs:.4f} bits")
+        print(f"  IG_obs       : {ig_obs:.4f} bits  |  eff_T : {eff_t:.4f}")
         top, prob = updater.top_recipe()
-        print(f"  top     : {top} ({prob:.4f})")
+        print(f"  top recipe   : {top} ({prob:.4f})")
         print_distribution(belief, updater.current_similarities())
 
-        entropy_log.append((f"Clip {i}", entropy_after, ig_obs))
+        ig_obs_log.append((f"Clip {i}", entropy_after_obs, ig_obs))
 
-        # Fire clarification answer after specified clip
-        if i == ANSWER_AFTER_CLIP:
-            print_divider(f"Clarification Answer")
-            print(f"  \"{CLARIFICATION_ANSWER}\"")
+        # ── Clarification (only for Clips 1 and 2) ────────────────────────
+        if qa is not None:
+            print_divider(f"Question after Clip {i}")
+            print(f"  Q: {qa['question']}")
+            print(f"  A: {qa['answer']}")
 
             h_before = updater.entropy()
-            belief = updater.incorporate_answer(CLARIFICATION_ANSWER)
+            belief = updater.incorporate_answer(qa["answer"])
             h_after = updater.entropy()
             ig_q = updater.ig_q()
 
@@ -107,7 +136,7 @@ def run_test():
             print(f"  top      : {top} ({prob:.4f})")
             print_distribution(belief, updater.current_similarities())
 
-            entropy_log.append(("Answer", h_after, ig_q))
+            ig_q_log_local.append((f"Q{i}", h_after, ig_q, ig_obs))
 
     # ── Final summary ──────────────────────────────────────────────────────
     print(f"\n{'═'*60}")
@@ -117,19 +146,22 @@ def run_test():
     print(f"  Final prob       : {prob:.4f}")
     print(f"  Final entropy    : {updater.entropy():.4f} bits")
 
-    print(f"\n  Information gain summary:")
-    print(f"  {'Step':25s}  {'Entropy':8s}  {'IG':8s}")
-    print(f"  {'─'*25}  {'─'*8}  {'─'*8}")
-    for label, ent, ig in entropy_log:
-        marker = " ← answer" if label == "Answer" else ""
-        print(f"  {label:25s}  {ent:.4f}    {ig:.4f}{marker}")
+    print(f"\n  IG comparison — observation vs clarification:")
+    print(f"  {'Step':10s}  {'IG_obs':8s}  {'IG_Q':8s}  {'IG_Q > IG_obs':15s}")
+    print(f"  {'─'*10}  {'─'*8}  {'─'*8}  {'─'*15}")
+    for label, _, ig_q, ig_obs in ig_q_log_local:
+        check = "✓" if ig_q > ig_obs else "✗"
+        print(f"  {label:10s}  {ig_obs:.4f}    {ig_q:.4f}    {check}")
 
-    print(f"\n  IG_Q log:")
-    for entry in updater.ig_q_log():
-        print(f"    answer  : {entry['answer']}")
-        print(f"    H before: {entry['entropy_before']}")
-        print(f"    H after : {entry['entropy_after']}")
-        print(f"    IG_Q    : {entry['ig_q']}")
+    print(f"\n  Full IG log:")
+    print(f"  {'Step':25s}  {'Type':15s}  {'IG':8s}")
+    print(f"  {'─'*25}  {'─'*15}  {'─'*8}")
+    for label, _, ig in [(l, e, i) for l, e, i in ig_obs_log]:
+        print(f"  {label:25s}  {'observation':15s}  {ig:.4f}")
+        matching_q = [q for q in ig_q_log_local if q[0] == f"Q{label[-1]}"]
+        if matching_q:
+            print(f"  {'':25s}  {'clarification':15s}  {matching_q[0][2]:.4f}")
+
     print(f"{'═'*60}\n")
 
 

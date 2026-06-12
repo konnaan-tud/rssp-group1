@@ -8,7 +8,7 @@ That sentence is embedded and appended to the session's observation sequence.
 
 The observation sequence grows clip by clip:
   [embed("slices garlic on a cutting board"),
-   embed("drops pasta into boiling water"),
+   embed("heats olive oil in a skillet"),
    ...]
 
 This sequence is passed to the belief updater after each clip.
@@ -40,7 +40,7 @@ class DynamicScene:
     Manages the growing observation sequence for one cooking session.
 
     Each observation (clip or answer) is embedded and stored
-    in temporal order. The full sequence is available for DTW matching.
+    in temporal order. The full sequence is available for similarity matching.
 
     Parameters
     ----------
@@ -50,7 +50,7 @@ class DynamicScene:
     def __init__(self, embedder: Embedder | None = None):
         self._embedder = embedder or Embedder()
         self._sequence: list[np.ndarray] = []
-        self._sentences: list[dict] = []  # metadata: sentence + type + index
+        self._sentences: list[dict] = []
 
     # ── Public API ──────────────────────────────────────────────────────
 
@@ -129,40 +129,3 @@ class DynamicScene:
                 for s in self._sentences
             ],
         }
-
-
-if __name__ == "__main__":
-    scene = DynamicScene()
-
-    # Simulate a carbonara session
-    observations = [
-        "pours water into a large pot",
-        "cracks eggs into a mixing bowl",
-        "grates pecorino into the mixing bowl",
-        "dices pancetta on a cutting board",
-    ]
-
-    print("=== Dynamic Scene Test ===\n")
-    for obs in observations:
-        vec = scene.add(obs)
-        print(f"  Added: '{obs}'")
-        print(f"  Vector shape: {vec.shape}, norm: {np.linalg.norm(vec):.4f}")
-
-    # Add clarification answer
-    answer = "I am adding pancetta and eggs to make carbonara"
-    vec = scene.add_answer(answer)
-    print(f"\n  Answer: '{answer}'")
-    print(f"  Vector shape: {vec.shape}")
-
-    print(f"\n=== Summary ===")
-    s = scene.summary()
-    print(f"  Sequence length: {s['length']}")
-    for obs in s["observations"]:
-        print(f"  {obs}")
-
-    # Check similarity between related sentences
-    seq = scene.get_sequence()
-    print(f"\n=== First vs last vector cosine similarity ===")
-    v1, v2 = seq[0], seq[-1]
-    sim = float(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
-    print(f"  {sim:.4f}")

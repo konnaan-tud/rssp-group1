@@ -110,29 +110,3 @@ class Embedder:
     @property
     def cache_size(self) -> int:
         return len(self._cache)
-
-
-if __name__ == "__main__":
-    embedder = Embedder()
-
-    sentences = [
-        "slices garlic on a cutting board",
-        "drops pasta into salted boiling water",
-        "drains pasta over the sink",
-        "cooks pancetta in a skillet",
-        "grates pecorino into a bowl",
-    ]
-
-    print("\n=== Embedding test ===")
-    vectors = embedder.embed_batch(sentences)
-    for s, v in zip(sentences, vectors):
-        print(f"  '{s[:50]}' → shape {v.shape}, norm {np.linalg.norm(v):.4f}")
-
-    # Check similarity between related sentences
-    import itertools
-    print("\n=== Pairwise cosine similarities ===")
-    for (s1, v1), (s2, v2) in itertools.combinations(zip(sentences, vectors), 2):
-        sim = float(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
-        print(f"  {sim:.4f}  |  '{s1[:35]}' ↔ '{s2[:35]}'")
-
-    print(f"\nCache size: {embedder.cache_size}")

@@ -1,19 +1,18 @@
 """
 probability/belief_updater_v3.py
 ---------------------------------
-DTW-based probabilistic belief updater over candidate recipes.
+Hybrid similarity belief updater over candidate recipes.
 
 After each observation clip or clarification answer:
   1. The new sentence is embedded and appended to the observation sequence
-  2. DTW similarity is computed between obs sequence and each recipe sequence
-  3. Softmax over similarities gives a probability distribution
-  4. Entropy is measured — IG_Q captured for clarification answers
+  2. Hybrid similarity (F1 + order consistency) computed against each recipe
+  3. Softmax with fixed temperature gives probability distribution
+  4. Entropy measured — IG_Q captured for clarification answers
 
 Key design decisions:
   - No Bayesian carry-forward: distribution recomputed from scratch each step
-    using the full observation sequence. DTW already encodes all history.
-  - Cosine distance as DTW cost function
-  - Temperature-scaled softmax for distribution sharpness
+  - Fixed temperature: principled and easy to justify
+  - Hybrid similarity: F1 scene matching + order consistency bonus
 
 Usage:
     from probability.belief_updater_v3 import BeliefUpdaterV3
@@ -37,27 +36,29 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from observation_pipeline.embedder import Embedder
 from observation_pipeline.dynamic_scene import DynamicScene
-from probability.dtw import dtw_similarity
+from probability.similarity import hybrid_similarity
 
 RECIPE_SEQUENCES_PATH = os.path.join("data", "recipe_sequences.json")
 
 
 class BeliefUpdaterV3:
     """
-    DTW-based belief updater over candidate recipes.
+    Hybrid similarity belief updater over candidate recipes.
 
     Parameters
     ----------
     recipe_sequences_path : path to data/recipe_sequences.json
-    temperature           : softmax temperature (lower = sharper distribution)
+    temperature           : softmax temperature (fixed, lower = sharper)
     """
 
     def __init__(
         self,
         recipe_sequences_path: str = RECIPE_SEQUENCES_PATH,
-        temperature: float = 0.01,
+        temperature: float = 0.05,
+        n_warmup: int = 3,
     ):
         self.temperature = temperature
+        self.n_warmup = n_warmup
 
         # Load recipe sequences
         with open(recipe_sequences_path, "r", encoding="utf-8") as f:
@@ -89,9 +90,10 @@ class BeliefUpdaterV3:
         # IG_Q tracking
         self._entropy_before_answer: float | None = None
         self._ig_q_log: list[dict] = []
+        self._last_similarities: dict[str, float] = {}
 
         print(f"[BeliefUpdaterV3] Loaded {self.N} recipes.")
-        print(f"[BeliefUpdaterV3] Temperature: {self.temperature}")
+        print(f"[BeliefUpdaterV3] Temperature: {self.temperature} | Warmup: {self.n_warmup} clips")
 
     # ── Public API ─────────────────────────────────────────────────────────
 
@@ -100,7 +102,7 @@ class BeliefUpdaterV3:
         Process one observation clip.
 
         Embeds the scene sentence, appends to observation sequence,
-        recomputes belief distribution via DTW.
+        recomputes belief distribution.
 
         Parameters
         ----------
@@ -115,8 +117,8 @@ class BeliefUpdaterV3:
         """
         Incorporate a clarification answer.
 
-        Embeds the answer, appends to observation sequence at current
-        position, recomputes belief. Records IG_Q.
+        Embeds the answer, appends to observation sequence,
+        recomputes belief. Records IG_Q.
 
         Parameters
         ----------
@@ -169,7 +171,7 @@ class BeliefUpdaterV3:
         return list(self._ig_q_log)
 
     def current_similarities(self) -> dict[str, float]:
-        """Raw DTW similarity scores from last update."""
+        """Raw similarity scores from last update."""
         return dict(self._last_similarities)
 
     def reset(self):
@@ -190,6 +192,7 @@ class BeliefUpdaterV3:
             "top_recipe": top,
             "top_prob": round(prob, 4),
             "ig_q": self.ig_q(),
+            "temperature": self.temperature,
             "sequence_length": self._scene.current_length(),
             "observations": self._scene.summary()["observations"],
         }
@@ -202,10 +205,11 @@ class BeliefUpdaterV3:
         """
         clone = BeliefUpdaterV3.__new__(BeliefUpdaterV3)
         clone.temperature = self.temperature
-        clone.recipe_sequences = self.recipe_sequences  # shared, read-only
+        clone.n_warmup = self.n_warmup
+        clone.recipe_sequences = self.recipe_sequences
         clone.recipe_names = self.recipe_names
         clone.N = self.N
-        clone._embedder = self._embedder  # shared, read-only
+        clone._embedder = self._embedder
         clone._scene = DynamicScene(embedder=self._embedder)
 
         # Copy current observation sequence
@@ -219,7 +223,7 @@ class BeliefUpdaterV3:
         clone.history = [dict(self.belief)]
         clone._entropy_before_answer = None
         clone._ig_q_log = []
-        clone._last_similarities = dict(getattr(self, "_last_similarities", {}))
+        clone._last_similarities = dict(self._last_similarities)
         return clone
 
     # ── Internal ───────────────────────────────────────────────────────────
@@ -229,18 +233,23 @@ class BeliefUpdaterV3:
         Recompute full belief distribution from current observation sequence.
 
         For each recipe:
-          1. Compute DTW similarity between obs sequence and recipe sequence
-          2. Apply softmax with temperature
+          1. Compute hybrid similarity (F1 + order consistency)
+          2. Apply softmax with warmup-scaled temperature
           3. Normalise to probability distribution
+
+        Temperature scaling:
+          effective_T = T / min(1, n / n_warmup)
+          Early observations use higher temperature (less sharp distribution)
+          to avoid over-committing on generic shared scenes.
         """
         obs_seq = self._scene.get_sequence()
 
         if not obs_seq:
             return dict(self.belief)
 
-        # DTW similarity for each recipe
+        # Hybrid similarity for each recipe
         similarities = np.array([
-            dtw_similarity(obs_seq, self.recipe_sequences[name])
+            hybrid_similarity(obs_seq, self.recipe_sequences[name])
             for name in self.recipe_names
         ], dtype=np.float32)
 
@@ -249,8 +258,13 @@ class BeliefUpdaterV3:
             for i, name in enumerate(self.recipe_names)
         }
 
-        # Softmax with temperature
-        probs = self._softmax(similarities, self.temperature)
+        # Warmup-scaled temperature
+        n = self._scene.current_length()
+        warmup_factor = min(1.0, n / self.n_warmup)
+        effective_T = self.temperature / warmup_factor if warmup_factor > 0 else self.temperature
+
+        # Softmax with effective temperature
+        probs = self._softmax(similarities, effective_T)
 
         # Build belief dict
         self.belief = {
@@ -263,6 +277,6 @@ class BeliefUpdaterV3:
     @staticmethod
     def _softmax(values: np.ndarray, temperature: float) -> np.ndarray:
         scaled = values / temperature
-        scaled -= scaled.max()  # numerical stability
+        scaled -= scaled.max()
         exp_vals = np.exp(scaled)
         return exp_vals / exp_vals.sum()
