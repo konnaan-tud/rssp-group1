@@ -1,52 +1,61 @@
+"""
+main.py — single dispatcher for the V3 pipeline.
+
+Usage:
+    python main.py --mode bootstrap   # embed recipes into data/recipe_sequences.json
+    python main.py --mode test        # run the carbonara test session (no VLM)
+    python main.py --mode vlm         # run the full VLM orchestrator
+"""
+
 from __future__ import annotations
 
 import argparse
-import json
+import os
+import sys
 from pathlib import Path
 
-from observation_pipeline.dynamic_scene import ClipObservation, DynamicSceneBuilder
-from probability.belief_updater_v3 import BeliefUpdaterV3
-from recipe_pipeline.generate_recipe_scenes import generate_recipe_scene_graphs
-from recipe_pipeline.recipe_sequencer import build_recipe_sequences
-
-
 ROOT = Path(__file__).resolve().parent
-DATASET_PATH = ROOT / "data" / "dataset.csv"
-GRAPH_DIR = ROOT / "recipe_graphs" / "v3"
-SEQUENCE_PATH = GRAPH_DIR / "recipe_sequences.json"
+sys.path.insert(0, str(ROOT))
 
 
-def bootstrap() -> None:
-    """Generate recipe graphs and recipe sequences from the dataset."""
-    generate_recipe_scene_graphs(DATASET_PATH, GRAPH_DIR)
-    build_recipe_sequences(GRAPH_DIR, SEQUENCE_PATH)
+def run_bootstrap() -> None:
+    """
+    Re-embed every scene in data/italian_recipe_scenes.json and write the
+    per-recipe vector lists to data/recipe_sequences.json. Safe to run
+    multiple times — the embedder cache avoids redundant work.
+    """
+    from recipe_pipeline.recipe_sequencer import build_recipe_sequences
+
+    scenes_path = ROOT / "data" / "italian_recipe_scenes.json"
+    out_path = ROOT / "data" / "recipe_sequences.json"
+    print(f"Embedding scenes from {scenes_path} → {out_path}")
+    build_recipe_sequences(str(scenes_path), str(out_path))
+    print("Bootstrap complete.")
 
 
-def demo_belief_update() -> dict[str, float]:
-    """Run a tiny end-to-end demo using the new package layout."""
-    bootstrap()
-    builder = DynamicSceneBuilder()
-    updater = BeliefUpdaterV3.from_recipe_directory(GRAPH_DIR, SEQUENCE_PATH)
+def run_test() -> None:
+    """Run the standalone carbonara belief-update test (no VLM, no orchestrator)."""
+    from probability.test_belief_v3 import run_test as _run_test
+    _run_test()
 
-    observation = builder.build(
-        ClipObservation(
-            clip_id="demo-clip-001",
-            ingredients=["cucumber", "onion", "sour cream"],
-            actions=["slice", "mix", "serve"],
-            notes="Cook assembles a cold salad and folds in a creamy dressing.",
-        )
-    )
-    updater.update(observation.sentences)
-    return updater.belief
+
+def run_vlm() -> None:
+    """Run the VLM orchestrator end-to-end."""
+    from orchestrator_v2_vlm import main as _main
+    _main()
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="RSSP Group 1 entry point.")
     parser.add_argument(
         "--mode",
-        choices=["bootstrap", "demo"],
-        default="demo",
-        help="bootstrap generates graph artifacts; demo also runs a belief update.",
+        choices=["bootstrap", "test", "vlm"],
+        default="test",
+        help=(
+            "bootstrap: re-embed recipe scenes into recipe_sequences.json. "
+            "test: run the carbonara belief-update test (no VLM). "
+            "vlm: run the full VLM-driven orchestrator."
+        ),
     )
     return parser.parse_args()
 
@@ -54,12 +63,11 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
     if args.mode == "bootstrap":
-        bootstrap()
-        print(f"Generated recipe artifacts under {GRAPH_DIR}")
-        return
-
-    belief = demo_belief_update()
-    print(json.dumps(belief, indent=2))
+        run_bootstrap()
+    elif args.mode == "test":
+        run_test()
+    elif args.mode == "vlm":
+        run_vlm()
 
 
 if __name__ == "__main__":

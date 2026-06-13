@@ -42,6 +42,7 @@ from observation_pipeline.dynamic_scene import DynamicScene
 from probability.similarity import hybrid_similarity
 
 RECIPE_SEQUENCES_PATH = os.path.join("data", "recipe_sequences.json")
+RECIPE_SCENES_PATH = os.path.join("data", "italian_recipe_scenes.json")
 
 
 class BeliefUpdaterV3:
@@ -51,12 +52,19 @@ class BeliefUpdaterV3:
     Parameters
     ----------
     recipe_sequences_path : path to data/recipe_sequences.json
+                            (pre-embedded per-scene vectors)
+    recipe_scenes_path    : path to data/italian_recipe_scenes.json
+                            (raw scene sentences — used by the questioning
+                            pipeline to show "next likely scenes" to the VLM
+                            and by the planner to simulate hypothetical
+                            answers per recipe)
     temperature           : softmax temperature (lower = sharper distribution)
     """
 
     def __init__(
         self,
         recipe_sequences_path: str = RECIPE_SEQUENCES_PATH,
+        recipe_scenes_path: str = RECIPE_SCENES_PATH,
         temperature: float = 0.05,
     ):
         self.temperature = temperature
@@ -70,6 +78,18 @@ class BeliefUpdaterV3:
             dish: [np.array(v, dtype=np.float32) for v in vectors]
             for dish, vectors in raw.items()
         }
+
+        # Load matching raw scene sentences. The file is a list of
+        # {"dish": ..., "scenes": [...]} entries.
+        self.recipe_sentences: dict[str, list[str]] = {}
+        if os.path.exists(recipe_scenes_path):
+            with open(recipe_scenes_path, "r", encoding="utf-8") as f:
+                scenes_raw = json.load(f)
+            for entry in scenes_raw:
+                dish = entry.get("dish", "").strip()
+                scenes = [s.strip() for s in entry.get("scenes", []) if s.strip()]
+                if dish and scenes:
+                    self.recipe_sentences[dish] = scenes
 
         self.recipe_names = list(self.recipe_sequences.keys())
         self.N = len(self.recipe_names)
@@ -204,6 +224,22 @@ class BeliefUpdaterV3:
             "observations": self._scene.summary()["observations"],
         }
 
+    def observed_sentences(self) -> list[str]:
+        """Strings of all observations (clips + answers) added so far, in order."""
+        return [meta["sentence"] for meta in self._scene.get_sentences()]
+
+    def unseen_recipe_scenes(self, recipe_name: str) -> list[str]:
+        """
+        Recipe scene sentences (from italian_recipe_scenes.json) for
+        `recipe_name` that have not yet appeared verbatim in the observation
+        sequence. Used by the questioning pipeline to build prompt context
+        and by the planner's simulator to pick a hypothetical answer per
+        recipe.
+        """
+        scenes = self.recipe_sentences.get(recipe_name, [])
+        observed = set(self.observed_sentences())
+        return [s for s in scenes if s not in observed]
+
     def copy(self) -> "BeliefUpdaterV3":
         """
         Create a lightweight copy for EIG simulation.
@@ -213,6 +249,7 @@ class BeliefUpdaterV3:
         clone = BeliefUpdaterV3.__new__(BeliefUpdaterV3)
         clone.temperature = self.temperature
         clone.recipe_sequences = self.recipe_sequences
+        clone.recipe_sentences = self.recipe_sentences
         clone.recipe_names = self.recipe_names
         clone.N = self.N
         clone._embedder = self._embedder

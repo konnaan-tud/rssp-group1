@@ -1,147 +1,193 @@
+"""
+questioning/questioning_pipeline.py
+-----------------------------------
+Builds the clarification-question prompt for the VLM and runs it.
+
+V3 port of the V2 pipeline. The architectural shift:
+
+V2 surfaced each recipe's REMAINING TERM VOCABULARY (e.g. "sour cream,
+white vinegar, dill") plus a flat "vocabulary pool" the VLM had to draw
+targets from.
+
+V3 surfaces each recipe's REMAINING SCENE SENTENCES — the next likely
+clip-level scenes the cook would produce if making that recipe. The VLM's
+"targets" field now holds plausible scene-style answers rather than bare
+ingredient words, because that's what the planner's simulator will compare
+against.
+
+Public functions:
+  build_recipe_context(bu)         — text block of session state for the prompt
+  build_question_prompt(context)   — full prompt string sent to Qwen
+  run_qwen_prompt(prompt)          — load Qwen, generate, return string
+"""
+
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import torch
 from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
 
 
-DEFAULT_MODEL = "Qwen/Qwen2.5-VL-3B-Instruct"
+DEFAULT_MODEL = "Qwen/Qwen2.5-VL-7B-Instruct"
 
 
-def load_static_graphs(graph_folder: str | Path) -> list[dict]:
-    """
-    Load all recipe graph JSON files from a folder.
-    """
-    graph_folder = Path(graph_folder)
+# ═══════════════════════════════════════════════════════════════════════════
+# Session context builder
+# ═══════════════════════════════════════════════════════════════════════════
 
-    if not graph_folder.exists():
-        raise FileNotFoundError(f"Graph folder not found: {graph_folder}")
-
-    graphs = []
-    for json_file in sorted(graph_folder.glob("*.json")):
-        with open(json_file, "r", encoding="utf-8") as f:
-            graphs.append(json.load(f))
-
-    if not graphs:
-        raise FileNotFoundError(f"No JSON graph files found in: {graph_folder}")
-
-    return graphs
-
-
-def build_question_prompt(
-    static_graphs: list[dict],
-    belief_state: dict[str, float],
+def build_recipe_context(
+    belief_updater,                       # BeliefUpdaterV3 (duck-typed)
+    active_threshold: float = 0.02,
+    top_k: int = 6,
+    future_scenes: int = 4,
 ) -> str:
     """
-    Build the prompt that asks the VLM to generate clarification questions.
+    Compose a compact text summary of session state for the VLM prompt.
+
+    Sections, in order:
+      1. CURRENT BELIEF DISTRIBUTION   — top recipes by probability, with bars
+      2. ALREADY OBSERVED              — full sentences seen so far, in order
+      3. ACTIVE CANDIDATE RECIPES      — for each, the next `future_scenes`
+                                         unseen scene sentences from the recipe
+
+    Parameters
+    ----------
+    belief_updater  : a BeliefUpdaterV3 instance
+    active_threshold: recipes with P(r) below this are dropped from context
+    top_k           : hard upper bound on number of candidates listed
+    future_scenes   : per-recipe limit on how many remaining scenes to show
+    """
+    bel = belief_updater.belief
+
+    # 1. Pick active candidates
+    active = [(name, p) for name, p in bel.items() if p >= active_threshold]
+    active.sort(key=lambda x: -x[1])
+    if len(active) > top_k:
+        active = active[:top_k]
+    if not active:                                # safety net
+        active = sorted(bel.items(), key=lambda x: -x[1])[:top_k]
+
+    # 2. Already-observed sentences (clips + answers, in temporal order)
+    observed = belief_updater.observed_sentences()
+
+    # 3. Compose
+    lines: list[str] = []
+
+    # 3a. Belief distribution
+    H = -sum(p * math.log2(p) for _, p in active if p > 0)
+    Hmax = math.log2(len(bel)) if len(bel) > 1 else 0.0
+    lines.append("CURRENT BELIEF DISTRIBUTION (sorted by probability):")
+    for name, p in active:
+        bar = "█" * int(round(p * 30))
+        lines.append(f"  {p:.3f}  {bar:<30}  {name}")
+    lines.append(
+        f"  entropy: {H:.3f} bits over {len(active)} active recipes "
+        f"(max possible: {Hmax:.3f} bits)"
+    )
+    lines.append("")
+
+    # 3b. Observation trail
+    lines.append("ALREADY OBSERVED (in temporal order — do not ask about these):")
+    if observed:
+        for i, s in enumerate(observed, start=1):
+            lines.append(f"  {i}. {s}")
+    else:
+        lines.append("  (nothing observed yet)")
+    lines.append("")
+
+    # 3c. Per-recipe remaining scenes — this is the discriminating signal
+    lines.append("ACTIVE CANDIDATE RECIPES — next likely scenes per recipe:")
+    lines.append("(Each list shows the recipe's REMAINING scene sentences.")
+    lines.append("Use them to identify what each recipe would distinctively")
+    lines.append("do next; draw your candidate answers from these scenes.)")
+    lines.append("")
+    for name, p in active:
+        unseen = belief_updater.unseen_recipe_scenes(name)[:future_scenes]
+        lines.append(f"- {name}  (p={p:.3f})")
+        if unseen:
+            for s in unseen:
+                lines.append(f"      • {s}")
+        else:
+            lines.append("      (all scenes already observed)")
+
+    return "\n".join(lines)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Prompt template
+# ═══════════════════════════════════════════════════════════════════════════
+
+def build_question_prompt(recipe_context: str) -> str:
+    """
+    Build the full prompt sent to Qwen. `recipe_context` is the block
+    produced by build_recipe_context(); it carries the belief distribution,
+    observation trail, and per-recipe remaining scenes.
     """
 
-    static_graphs_json = json.dumps(static_graphs, indent=2, ensure_ascii=False)
-    belief_state_json = json.dumps(belief_state, indent=2, ensure_ascii=False)
-
     prompt = f"""
-You are a clarification-question planner for a VLM-based cooking observer.
+You generate clarification questions for a cooking observer that is
+uncertain which recipe the cook is making. The candidate recipes and
+their remaining (unseen) scene sentences are below.
 
-The observer has watched a short cooking video clip and currently has uncertainty
-over which recipe is being prepared. The candidate recipes are listed below.
-
-YOUR TASK
-Generate exactly 3 open wh-questions whose answers would reduce uncertainty
-over the current recipe belief state as much as possible.
-
-═══ HOW TO FILL "targets" — READ CAREFULLY ═══
-
-The "targets" field is the most important part of each question. It is the
-list of CONCRETE WORDS OR PHRASES that the human's answer might contain —
-actual ingredient names or action names drawn from the recipe vocabulary.
-
-A downstream planner uses these targets to test whether the question would
-actually distinguish between recipes. Abstract placeholder names CANNOT be
-matched against any recipe and make the question useless.
-
-GOOD targets (concrete ingredients or actions from the recipes below):
-    "targets": ["sour cream", "white vinegar", "mayonnaise"]
-    "targets": ["whisk", "boil", "stir"]
-    "targets": ["dill", "celery seed", "mint"]
-
-BAD targets (NEVER produce these — they cannot be matched):
-    "targets": ["main_ingredient"]
-    "targets": ["stage_id"]
-    "targets": ["next_action"]
-    "targets": ["first_step"]
-    "targets": ["ingredient or action being tested"]
-
-Every string in "targets" must appear — in the same or very similar form —
-in the "all_ingredients" or "actions" fields of one of the recipe graphs
-shown below.
-
-═══ FORMAT ═══
+TASK
+Generate exactly 3 wh-questions whose answers would reduce uncertainty
+over the current recipe belief.
 
 For each question return:
-  - "question":          the natural-language clarification question
-  - "question_form":     "wh"
-  - "targets":           list of concrete ingredient/action strings
-  - "distinguishes":     list of recipe names this question helps separate
-  - "expected_information_gain_reason": one-sentence justification
+  - "question":      the wh-question (starts with what/which/where/when/why/how)
+  - "question_form": "wh"
+  - "targets":       2-4 scene-style sentences a cook MIGHT say as an answer.
+                     Each must be drawn from the REMAINING SCENES of one
+                     active candidate, or a close paraphrase of one. They
+                     should focus on what's about to happen NEXT, not far
+                     in the future.
+  - "distinguishes": names of recipes this question helps separate (from
+                     the ACTIVE CANDIDATES below)
+  - "expected_information_gain_reason": one sentence
 
-Do not ask:
-  - "What recipe are you making?"
-  - "Which recipe is this?"
+Do not ask "What recipe are you making?" or "Which recipe is this?".
 
-Each question must begin with one of: what, which, where, when, why, how.
+═══ SESSION CONTEXT ═══
+{recipe_context}
 
-Rank from best to worst by expected information gain.
-
-═══ CURRENT BELIEF STATE ═══
-{belief_state_json}
-
-═══ STATIC RECIPE GRAPHS ═══
-(These are the only candidate recipes. Draw your targets from the
-ingredients and actions listed here.)
-
-{static_graphs_json}
-
-═══ RESPONSE ═══
-
-Return ONLY valid JSON in the format below. The examples use concrete
-vocabulary — replace them with concrete vocabulary drawn from the recipes
-above. DO NOT keep the schema-style placeholders like "stage_id" or
-"main_ingredient".
-
+═══ EXAMPLE STRUCTURE (placeholder values — do NOT copy verbatim) ═══
 {{
   "questions": [
     {{
       "rank": 1,
-      "question": "Which ingredient are you adding to the dressing?",
+      "question": "<a wh-question about an upcoming step>",
       "question_form": "wh",
-      "targets": ["sour cream", "white vinegar", "mayonnaise"],
-      "distinguishes": ["cucumber salad with sour cream", "mizeria"],
-      "expected_information_gain_reason": "These dressings appear in different recipes; naming the ingredient identifies the recipe family."
+      "targets": [
+        "<scene sentence drawn from candidate A's remaining scenes>",
+        "<scene sentence drawn from candidate B's remaining scenes>",
+        "<scene sentence drawn from candidate C's remaining scenes>"
+      ],
+      "distinguishes": ["<candidate A>", "<candidate B>", "<candidate C>"],
+      "expected_information_gain_reason": "<one-sentence reason>"
     }},
-    {{
-      "rank": 2,
-      "question": "What action are you about to perform next?",
-      "question_form": "wh",
-      "targets": ["whisk", "boil", "marinate"],
-      "distinguishes": ["best-ever-cucumber-dill-salad", "moms marinated cucumbers"],
-      "expected_information_gain_reason": "Different recipes use different dressing preparations; the next action narrows the candidates."
-    }},
-    {{
-      "rank": 3,
-      "question": "Which herb or spice will you add?",
-      "question_form": "wh",
-      "targets": ["dill", "mint", "celery seed"],
-      "distinguishes": ["best-ever-cucumber-dill-salad", "tomato cucumber salad with mint"],
-      "expected_information_gain_reason": "Each recipe uses a distinctive herb so naming it disambiguates."
-    }}
+    {{ "rank": 2, "question": "...", ... }},
+    {{ "rank": 3, "question": "...", ... }}
   ]
 }}
+
+★ Rules ★
+  - Replace EVERY <placeholder> with concrete content drawn from the
+    SESSION CONTEXT above.
+  - Targets must be scene sentences from the REMAINING SCENES list — do
+    not invent ingredients or dishes that aren't in the candidates.
+  - Prefer questions about the NEXT step, not steps far in the future.
+  - Return ONLY the JSON object, no commentary.
 """
 
     return prompt.strip()
 
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Qwen runner
+# ═══════════════════════════════════════════════════════════════════════════
 
 def run_qwen_prompt(
     prompt: str,
@@ -149,11 +195,12 @@ def run_qwen_prompt(
     max_new_tokens: int = 768,
 ) -> str:
     """
-    Load Qwen2.5-VL and run a simple text prompt.
+    Load Qwen2.5-VL and run a simple text prompt. Returns the generated
+    response as a string.
 
-    Returns the generated response as a string.
+    Loads the model on every call — fine for a 1-2 question demo, would
+    want refactoring to load-once for longer sessions.
     """
-
     if torch.backends.mps.is_available():
         device = "mps"
     elif torch.cuda.is_available():
@@ -176,66 +223,50 @@ def run_qwen_prompt(
         {
             "role": "user",
             "content": [
-                {
-                    "type": "text",
-                    "text": prompt,
-                }
+                {"type": "text", "text": prompt},
             ],
         }
     ]
 
     text = processor.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True,
+        messages, tokenize=False, add_generation_prompt=True,
     )
-
     inputs = processor(
-        text=[text],
-        return_tensors="pt",
-        padding=True,
+        text=[text], return_tensors="pt", padding=True,
     ).to(device)
 
     print("Generating...", flush=True)
 
     with torch.inference_mode():
-        generated_ids = model.generate(
-            **inputs,
-            max_new_tokens=max_new_tokens,
-        )
+        generated_ids = model.generate(**inputs, max_new_tokens=max_new_tokens)
 
-    generated_ids_trimmed = generated_ids[:, inputs.input_ids.shape[1]:]
-
+    trimmed = generated_ids[:, inputs.input_ids.shape[1]:]
     response = processor.batch_decode(
-        generated_ids_trimmed,
-        skip_special_tokens=True,
-        clean_up_tokenization_spaces=False,
+        trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False,
     )[0]
-
     return response
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# Smoke test
+# ═══════════════════════════════════════════════════════════════════════════
+
 if __name__ == "__main__":
-    graph_folder = "recipe_graphs/instruct"
+    # Print the context + prompt without calling Qwen. Useful for fast
+    # iteration on the prompt wording.
+    import os, sys
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-    # replace with actual belief state json
+    from probability.belief_updater_v3 import BeliefUpdaterV3
 
-    belief_state = {
-        "cucumber salad": 0.34,
-        "mizeria": 0.33,
-        "mom_s_marinated_cucumbers": 0.33,
-    }
+    bu = BeliefUpdaterV3()
+    bu.update("A cook pours water into a large pot.")
+    bu.update("A cook cracks eggs into a mixing bowl.")
 
-    # Replace with actual path to recipe graph JSON files
+    context = build_recipe_context(bu)
+    print("\n----- Recipe context -----\n")
+    print(context)
 
-    static_graphs = load_static_graphs(graph_folder)
-
-    prompt = build_question_prompt(
-        static_graphs=static_graphs,
-        belief_state=belief_state,
-    )
-
-    response = run_qwen_prompt(prompt)
-
-    print("\n----- Qwen response -----\n")
-    print(response)
+    prompt = build_question_prompt(recipe_context=context)
+    print("\n----- Full prompt -----\n")
+    print(prompt)

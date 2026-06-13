@@ -1,10 +1,10 @@
 """
-questioning_planner.py
-----------------------
+questioning/questioning_planner.py
+----------------------------------
 Scores candidate clarification questions by *measured* Expected Information
 Gain (EIG) under the current belief, using a per-recipe answer simulator.
 
-The pipeline this slots into:
+V3 port of the V2 planner. The high-level shape is identical:
 
     1. questioning_pipeline.py asks the VLM for K candidate questions
     2. questioning_planner.rank_questions(qs, bu) scores each one by EIG
@@ -15,12 +15,15 @@ EIG formulation (Bayesian experimental design):
 
     EIG(Q) ≈ Σ_{r in top-k}  P(r) · [ H(B) − H(B | simulated_answer_if_r(Q)) ]
 
-For each candidate question we ask "if recipe r is the truth, what answer
-would the human give?", simulate that answer on a *copy* of the belief, and
-average the resulting entropy drops weighted by the current belief over r.
-
-This is option A from the discussion — deterministic, no extra VLM calls
-needed during scoring.
+What changed from V2:
+- Recipes are no longer bags of terms; they are ordered scene sequences.
+- simulate_answer now produces a SCENE-STYLE SENTENCE per candidate recipe,
+  chosen as the recipe's unseen scene most semantically related to the
+  question. This replaces V2's "match targets against term vocabulary"
+  logic.
+- The EIG loop, ranking, and gating are unchanged — they only depend on
+  bu.copy(), bu.incorporate_answer(), and bu.entropy(), all of which V3
+  supports with the same signatures.
 """
 
 from __future__ import annotations
@@ -28,90 +31,74 @@ from __future__ import annotations
 import contextlib
 import io
 
-from belief_updater_v2 import BeliefUpdaterV2
+import numpy as np
+
+from probability.belief_updater_v3 import BeliefUpdaterV3
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Per-recipe answer simulation
+# Per-recipe scene simulation
 # ═══════════════════════════════════════════════════════════════════════════
 
-def _fuzzy_pick(target: str, candidates: set[str]) -> str | None:
-    """
-    Substring match between a question target and a recipe term.
-    Handles "vinegar" → "white vinegar", "sour cream" → "sour cream", etc.
-    Returns the matched candidate term, or None.
-    """
-    t = target.lower().strip()
-    if not t:
-        return None
-    for term in candidates:
-        if t in term or term in t:
-            return term
-    return None
+def _cosine(a: np.ndarray, b: np.ndarray) -> float:
+    """Cosine similarity between two 1-D numpy vectors."""
+    na = float(np.linalg.norm(a))
+    nb = float(np.linalg.norm(b))
+    if na == 0.0 or nb == 0.0:
+        return 0.0
+    return float(np.dot(a, b) / (na * nb))
 
 
-def _term_rarity(term: str, belief_updater: BeliefUpdaterV2) -> float:
-    """
-    Inverse document frequency over the recipe set.
-    Rare term → high value → preferred as a discriminating answer.
-    """
-    n = sum(
-        1 for r_terms in belief_updater.recipe_term_vectors.values()
-        if term in r_terms
-    )
-    return 1.0 / max(n, 1)
+# Temporal window: how many of the recipe's NEXT unseen scenes we consider
+# when simulating an answer. Bounds the planner to questions about the near
+# future, not the eventual finishing steps.
+NEAR_FUTURE_WINDOW = 3
 
 
 def simulate_answer(
     question: dict,
     recipe_name: str,
-    belief_updater: BeliefUpdaterV2,
+    belief_updater: BeliefUpdaterV3,
+    near_future_window: int = NEAR_FUTURE_WINDOW,
 ) -> str | None:
     """
-    Hypothetical answer the human would give if `recipe_name` were the truth.
+    Hypothetical scene-style answer the human would give if `recipe_name`
+    were the truth.
 
-    Strategy:
-      0. If the question's targets don't appear anywhere in the recipe
-         vocabulary (e.g. tool/colour question — recipes don't track those),
-         answer literally with targets[0]. All recipes return the same string
-         → EIG correctly comes out near zero.
-      1. Otherwise, if this recipe's *unseen* vocabulary overlaps with the
-         question's targets, return that overlap term (with fuzzy matching).
-      2. Otherwise (the recipe is grounded in the question's domain but
-         doesn't share a target), return the recipe's rarest unseen term
-         — its most discriminating "this is what I'm doing instead" answer.
-      3. If nothing is unseen, return None (nothing new to say).
+    Strategy (V3, scene-aware with temporal locality):
+      1. Take the recipe's UNSEEN scenes, RESTRICTED to the next
+         `near_future_window` scenes in the recipe's order. This keeps
+         questions focused on what's about to happen rather than on
+         finishing-step scenes that won't be reached for a while.
+      2. Pick the one whose embedding is most semantically similar to the
+         question.
+      3. If nothing is unseen, return None.
 
-    Returns the simulated answer string, or None.
+    The near-future window directly addresses a problem we saw in the V3
+    log: when carbonara had only "pours water" observed, the planner could
+    simulate "I am cracking eggs" or "I am dicing pancetta" or even
+    finishing scenes, because all were unseen. The window bounds that.
     """
-    recipe_terms = set(belief_updater.recipe_term_vectors[recipe_name].keys())
-    obs_terms = set(belief_updater._obs_terms.keys())
-    unseen = recipe_terms - obs_terms
+    question_text = (question.get("question") or "").strip()
+    if not question_text:
+        return None
 
-    targets = question.get("targets", []) or []
-
-    # Step 0 — grounded check: do any targets touch the recipe vocabulary at all?
-    all_recipe_terms = belief_updater.known_recipe_terms
-    grounded = any(
-        _fuzzy_pick(t, all_recipe_terms) is not None for t in targets
-    )
-
-    if not grounded:
-        # Off-domain question (tool, colour, etc.) — every recipe gives the
-        # same literal answer, so EIG is zero by construction.
-        return targets[0] if targets else None
-
-    # Step 1 — target hits this recipe's unseen terms?
-    for target in targets:
-        match = _fuzzy_pick(target, unseen)
-        if match is not None:
-            return match
-
-    # Step 2 — this recipe doesn't have any of the target ingredients.
-    # Pick its rarest unseen term as a "this is what I'd say instead" answer.
+    unseen = belief_updater.unseen_recipe_scenes(recipe_name)
     if not unseen:
         return None
-    return max(unseen, key=lambda t: _term_rarity(t, belief_updater))
+
+    # Restrict to the next N unseen scenes (these are already in recipe
+    # order because unseen_recipe_scenes preserves order).
+    near = unseen[:max(1, near_future_window)]
+
+    # Embed the question and each near-future scene. The embedder is
+    # cached, so repeated calls during simulation are cheap.
+    q_vec = belief_updater._embedder.embed(question_text)
+    scene_vecs = belief_updater._embedder.embed_batch(near)
+
+    cosines = [_cosine(q_vec, v) for v in scene_vecs]
+    best_idx = int(max(range(len(cosines)), key=lambda i: cosines[i]))
+    return near[best_idx]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -120,15 +107,15 @@ def simulate_answer(
 
 def expected_information_gain(
     question: dict,
-    belief_updater: BeliefUpdaterV2,
+    belief_updater: BeliefUpdaterV3,
     top_k: int = 5,
 ) -> tuple[float, list[dict]]:
     """
     Measured EIG of `question` under the current belief.
 
-    Iterates over the top-k recipes by current belief, simulates each one's
-    answer to the question, applies it to a copy of the belief updater, and
-    averages H(B) − H(B | a) weighted by P(r).
+    Iterates over the top-k recipes by current belief, simulates each
+    recipe's answer to the question, applies it to a *copy* of the belief
+    updater, and averages H(B) − H(B | a) weighted by P(r).
 
     Returns (eig, per_branch_details). Each branch dict captures the
     simulated answer, predicted posterior entropy, and ΔH — useful for
@@ -154,8 +141,7 @@ def expected_information_gain(
             })
             continue
 
-        # Simulate on a copy; suppress the [compound terms extracted] print
-        # so the planner doesn't drown the logs.
+        # Simulate on a copy; suppress any prints from incorporate_answer.
         clone = belief_updater.copy()
         with contextlib.redirect_stdout(io.StringIO()):
             clone.incorporate_answer(ans)
@@ -176,12 +162,12 @@ def expected_information_gain(
 
 def rank_questions(
     questions: list[dict],
-    belief_updater: BeliefUpdaterV2,
+    belief_updater: BeliefUpdaterV3,
     top_k: int = 5,
 ) -> list[dict]:
     """
-    Annotate each candidate question with measured EIG and per-branch detail,
-    sorted by EIG descending.
+    Annotate each candidate question with measured EIG and per-branch
+    detail, sorted by EIG descending.
 
     Each returned dict has the original question fields plus:
       - "measured_eig": float, in bits
@@ -204,7 +190,7 @@ def rank_questions(
 # ═══════════════════════════════════════════════════════════════════════════
 
 def should_ask(
-    belief_updater: BeliefUpdaterV2,
+    belief_updater: BeliefUpdaterV3,
     questions: list[dict],
     entropy_threshold: float = 0.5,
     eig_threshold: float = 0.10,
@@ -218,13 +204,6 @@ def should_ask(
       (a) budget not burnt:   questions_asked < max_questions
       (b) uncertainty high:   H(belief) > entropy_threshold
       (c) useful Q exists:    max measured EIG > eig_threshold
-
-    Rationale:
-      - (a) Cooking is interactive; asking every window annoys the human.
-      - (b) If the belief is already sharp, an answer adds little.
-      - (c) Even with high entropy, if no available question actually
-            distinguishes the top recipes, asking is wasted breath
-            (the professor's "what tool are you using?" example).
 
     Returns (should_ask, best_question_or_None, all_ranked).
     `all_ranked` is returned even when we choose not to ask so the caller
