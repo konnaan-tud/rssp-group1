@@ -49,35 +49,58 @@ def _cosine(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.dot(a, b) / (na * nb))
 
 
-# Temporal window: how many of the recipe's NEXT unseen scenes we consider
-# when simulating an answer. Bounds the planner to questions about the near
-# future, not the eventual finishing steps.
+# Temporal window base. The actual window per recipe grows as that recipe's
+# early scenes are observed — see _adaptive_window() below.
 NEAR_FUTURE_WINDOW = 3
+
+
+def _adaptive_window(
+    belief_updater: BeliefUpdaterV3,
+    recipe_name: str,
+    base: int = NEAR_FUTURE_WINDOW,
+) -> int:
+    """
+    Number of recipe scenes to consider for `recipe_name`.
+
+    Grows as the recipe's early scenes get semantically observed. With
+    `base=3`, the simulator looks at the next 3 unseen scenes when the
+    session has just started, but at scenes 5–10 after several scenes
+    have been observed. This unlocks ambiguous-twin handling: when top-k
+    recipes share their first few scenes, the simulator now looks past
+    those shared scenes to find where the recipes actually diverge.
+
+    Formula: window = base + (number of scenes already observed for this
+    recipe), capped at the number of remaining unseen scenes.
+    """
+    total = len(belief_updater.recipe_sentences.get(recipe_name, []))
+    unseen_count = len(belief_updater.unseen_recipe_scenes(recipe_name))
+    observed_count = max(0, total - unseen_count)
+    return min(base + observed_count, max(unseen_count, 1))
 
 
 def simulate_answer(
     question: dict,
     recipe_name: str,
     belief_updater: BeliefUpdaterV3,
-    near_future_window: int = NEAR_FUTURE_WINDOW,
+    near_future_window: int | None = None,
 ) -> str | None:
     """
     Hypothetical scene-style answer the human would give if `recipe_name`
     were the truth.
 
-    Strategy (V3, scene-aware with temporal locality):
-      1. Take the recipe's UNSEEN scenes, RESTRICTED to the next
-         `near_future_window` scenes in the recipe's order. This keeps
-         questions focused on what's about to happen rather than on
-         finishing-step scenes that won't be reached for a while.
-      2. Pick the one whose embedding is most semantically similar to the
+    Strategy (V3, scene-aware with adaptive temporal locality):
+      1. Take the recipe's UNSEEN scenes (semantic-match — handled by
+         BeliefUpdaterV3.unseen_recipe_scenes).
+      2. Restrict to the next K scenes, where K = `_adaptive_window(...)`
+         if no explicit override is passed. Default behaviour grows K as
+         more of the recipe's scenes are observed.
+      3. Pick the one whose embedding is most semantically similar to the
          question.
-      3. If nothing is unseen, return None.
+      4. If nothing is unseen, return None.
 
-    The near-future window directly addresses a problem we saw in the V3
-    log: when carbonara had only "pours water" observed, the planner could
-    simulate "I am cracking eggs" or "I am dicing pancetta" or even
-    finishing scenes, because all were unseen. The window bounds that.
+    The default adaptive K replaces the previous fixed K=3 — it lets the
+    planner reach later recipe scenes when the early ones are already
+    confirmed, which is what makes "ambiguous twin" questions scorable.
     """
     question_text = (question.get("question") or "").strip()
     if not question_text:
@@ -87,8 +110,10 @@ def simulate_answer(
     if not unseen:
         return None
 
-    # Restrict to the next N unseen scenes (these are already in recipe
-    # order because unseen_recipe_scenes preserves order).
+    if near_future_window is None:
+        near_future_window = _adaptive_window(belief_updater, recipe_name)
+
+    # Restrict to the next K unseen scenes (already in recipe order).
     near = unseen[:max(1, near_future_window)]
 
     # Embed the question and each near-future scene. The embedder is

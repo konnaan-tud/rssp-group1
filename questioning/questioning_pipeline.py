@@ -189,36 +189,19 @@ Do not ask "What recipe are you making?" or "Which recipe is this?".
 # Qwen runner
 # ═══════════════════════════════════════════════════════════════════════════
 
-def run_qwen_prompt(
+def generate_text_with_model(
     prompt: str,
-    model_name: str = DEFAULT_MODEL,
+    model,
+    processor,
+    device: str,
     max_new_tokens: int = 768,
 ) -> str:
     """
-    Load Qwen2.5-VL and run a simple text prompt. Returns the generated
-    response as a string.
-
-    Loads the model on every call — fine for a 1-2 question demo, would
-    want refactoring to load-once for longer sessions.
+    Text-only generation against an already-loaded Qwen2.5-VL model.
+    Used by the orchestrator when it has loaded the VLM once (via
+    observation_pipeline.video_observer.load_qwen_vlm) and wants to reuse
+    that load for question generation.
     """
-    if torch.backends.mps.is_available():
-        device = "mps"
-    elif torch.cuda.is_available():
-        device = "cuda"
-    else:
-        device = "cpu"
-
-    print(f"Loading {model_name} on {device}...", flush=True)
-
-    model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-        model_name,
-        torch_dtype=torch.float16,
-    ).to(device)
-
-    processor = AutoProcessor.from_pretrained(model_name)
-
-    print("Model ready.", flush=True)
-
     messages = [
         {
             "role": "user",
@@ -227,7 +210,6 @@ def run_qwen_prompt(
             ],
         }
     ]
-
     text = processor.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=True,
     )
@@ -244,6 +226,37 @@ def run_qwen_prompt(
     response = processor.batch_decode(
         trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False,
     )[0]
+    return response
+
+
+def run_qwen_prompt(
+    prompt: str,
+    model_name: str = DEFAULT_MODEL,
+    max_new_tokens: int = 768,
+) -> str:
+    """
+    Backwards-compatible wrapper: loads Qwen2.5-VL fresh and runs a text
+    prompt. Prefer load_qwen_vlm() + generate_text_with_model() for any
+    workflow that runs more than one VLM call per session.
+    """
+    if torch.backends.mps.is_available():
+        device = "mps"
+    elif torch.cuda.is_available():
+        device = "cuda"
+    else:
+        device = "cpu"
+
+    print(f"Loading {model_name} on {device}...", flush=True)
+    model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
+        model_name,
+        torch_dtype=torch.float16,
+    ).to(device)
+    processor = AutoProcessor.from_pretrained(model_name)
+    print("Model ready.", flush=True)
+
+    response = generate_text_with_model(
+        prompt, model, processor, device, max_new_tokens=max_new_tokens,
+    )
     return response
 
 

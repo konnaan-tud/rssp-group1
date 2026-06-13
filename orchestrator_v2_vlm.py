@@ -40,27 +40,35 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
 from probability.belief_updater_v3 import BeliefUpdaterV3
+from observation_pipeline.video_observer import load_qwen_vlm, describe_clip
 from questioning.questioning_pipeline import (
     build_recipe_context,
     build_question_prompt,
-    run_qwen_prompt,
+    generate_text_with_model,
 )
 from questioning.questioning_planner import should_ask, simulate_answer
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Mock observation trajectory — carbonara session.
-# Each entry is one scene sentence (one VLM-observed clip in the real
-# pipeline). In production these come from run_dynamic_loop.py fed into
-# bu.update() one window at a time.
+# Observation trajectory — carbonara session (REAL VIDEO).
+# Each entry is a path to one cooking clip; the orchestrator runs each clip
+# through Qwen2.5-VL to extract a scene sentence, then feeds that sentence
+# to bu.update(). Build the clips with:
+#     python scripts/prepare_clips.py
 # ─────────────────────────────────────────────────────────────────────────
 
+CLIPS_DIR = Path("data/clips")
+
 WINDOWS = [
-    "A cook pours water into a large pot.",
-    "A cook cracks eggs into a mixing bowl.",
-    "A cook grates pecorino into the mixing bowl.",
-    "A cook dices pancetta on a cutting board.",
-    "A cook cooks pancetta in a skillet.",
+    CLIPS_DIR / "01_pour_water.mp4",
+    CLIPS_DIR / "02_crack_egg.mp4",
+    CLIPS_DIR / "03_grating_pecorino.mp4",
+    CLIPS_DIR / "04_chopping_pancetta.mp4",
+    CLIPS_DIR / "05_cooking_pancetta.mp4",
+    CLIPS_DIR / "06_boil_pasta.mp4",
+    CLIPS_DIR / "07_drain_pasta.mp4",
+    CLIPS_DIR / "08_pasta_into_skillet.mp4",
+    CLIPS_DIR / "09_stirring_carbonara.mp4",
 ]
 
 
@@ -85,6 +93,34 @@ WINDOWS = [
 
 GROUND_TRUTH = "carbonara"
 
+# Minimum cosine between the question and the simulated scene for the human
+# stub to actually answer with that scene. If below this, the cook says
+# "doesn't apply yet" — preventing false IG_Q signals from questions whose
+# answer the cook can't really give.
+HUMAN_STUB_MIN_COSINE = 0.40
+HUMAN_STUB_NOT_AT_STEP = (
+    "That doesn't apply yet — I'm not at that step of the recipe."
+)
+
+
+def _to_first_person(scene: str) -> str:
+    """Convert a recipe-style sentence ('A cook cracks eggs...') to a
+    first-person human answer ('I am cracking eggs...')."""
+    return (
+        scene
+        .replace("A cook ", "I am ")
+        .replace("cracks", "cracking")
+        .replace("grates", "grating")
+        .replace("dices", "dicing")
+        .replace("cooks", "cooking")
+        .replace("pours", "pouring")
+        .replace("drops", "dropping")
+        .replace("drains", "draining")
+        .replace("transfers", "transferring")
+        .replace("stirs", "stirring")
+        .replace("tosses", "tossing")
+    )
+
 
 def pick_human_answer(question_text: str, bu: BeliefUpdaterV3) -> str:
     q = question_text.lower()
@@ -97,21 +133,27 @@ def pick_human_answer(question_text: str, bu: BeliefUpdaterV3) -> str:
     if "herb" in q:
         return "Carbonara does not use fresh herbs, only black pepper."
 
-    # Default: ask the simulator what the carbonara cook would say.
-    simulated = simulate_answer(
-        {"question": question_text}, GROUND_TRUTH, bu,
-    )
-    if simulated:
-        # Convert the recipe-style sentence into a first-person human answer.
-        # "A cook cracks eggs into a mixing bowl." → "I am cracking eggs into a mixing bowl."
-        return simulated.replace("A cook ", "I am ").replace(
-            "cracks", "cracking").replace("grates", "grating").replace(
-            "dices", "dicing").replace("cooks", "cooking").replace(
-            "pours", "pouring").replace("drops", "dropping").replace(
-            "drains", "draining").replace("transfers", "transferring").replace(
-            "stirs", "stirring").replace("tosses", "tossing")
+    # Default: simulate against carbonara and check whether the picked scene
+    # is actually relevant to the question. If not, the cook says "doesn't
+    # apply yet" — which is exactly what a real human would say if asked
+    # about a step they haven't reached.
+    import numpy as np
+    from questioning.questioning_planner import NEAR_FUTURE_WINDOW, _cosine
 
-    return "I am cracking eggs into a mixing bowl."  # safety fallback
+    near = bu.unseen_recipe_scenes(GROUND_TRUTH)[:NEAR_FUTURE_WINDOW]
+    if not near:
+        return HUMAN_STUB_NOT_AT_STEP
+
+    q_vec = bu._embedder.embed(question_text)
+    scene_vecs = bu._embedder.embed_batch(near)
+    cosines = [_cosine(q_vec, v) for v in scene_vecs]
+    best_idx = int(max(range(len(cosines)), key=lambda i: cosines[i]))
+    best_cos = cosines[best_idx]
+
+    if best_cos < HUMAN_STUB_MIN_COSINE:
+        return HUMAN_STUB_NOT_AT_STEP
+
+    return _to_first_person(near[best_idx])
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -187,9 +229,16 @@ def parse_vlm_questions(raw_response: str) -> list[dict]:
     return clean
 
 
-def generate_vlm_questions(belief_updater: BeliefUpdaterV3) -> list[dict]:
+def generate_vlm_questions(
+    belief_updater: BeliefUpdaterV3,
+    model,
+    processor,
+    device: str,
+) -> list[dict]:
     """
-    Build the prompt, call Qwen, parse the JSON response.
+    Build the prompt, call Qwen on the already-loaded model, parse the
+    JSON response. Reuses the model loaded at session start by
+    load_qwen_vlm() — no per-call reload.
     """
     context = build_recipe_context(
         belief_updater,
@@ -201,8 +250,8 @@ def generate_vlm_questions(belief_updater: BeliefUpdaterV3) -> list[dict]:
     print(f"  [VLM] Active recipes in context: {min(n_active, PROMPT_TOP_K)}")
 
     prompt = build_question_prompt(recipe_context=context)
-    print("  [VLM] Calling Qwen (this loads the model on first call)...")
-    raw_response = run_qwen_prompt(prompt)
+    print("  [VLM] Generating candidate questions...")
+    raw_response = generate_text_with_model(prompt, model, processor, device)
 
     print("\n  [VLM raw response]")
     print("  " + raw_response.replace("\n", "\n  "))
@@ -217,20 +266,113 @@ def generate_vlm_questions(belief_updater: BeliefUpdaterV3) -> list[dict]:
 # ─────────────────────────────────────────────────────────────────────────
 
 def main():
+    # 1. Sanity check: every clip must exist before we waste 30s on model load.
+    missing = [p for p in WINDOWS if not p.exists()]
+    if missing:
+        print("Missing clip files:")
+        for p in missing:
+            print(f"  - {p}")
+        print("\nRun: python scripts/prepare_clips.py")
+        return
+
     bu = BeliefUpdaterV3()
+
+    # Parallel shadow belief updater: sees observations only, never sees
+    # clarification answers. Used to measure per-question redundancy —
+    # specifically, how much of the NEXT observation's information was
+    # "stolen" by the question.
+    #
+    # bu.copy() shares the embedder + recipe vectors (read-only) and starts
+    # with the same (empty) observation sequence and uniform belief.
+    bu_obs_only = bu.copy()
+
+    # 2. Load Qwen2.5-VL once. Reused for BOTH:
+    #    - observation (video → scene sentence)
+    #    - question generation (text prompt → JSON)
+    print()
+    model, processor, device = load_qwen_vlm()
+
+    # 3. Belief-history tracker. One row per event (initial / observation /
+    # answer). Saved to outputs/belief_history.csv at the end for plotting.
+    history_rows: list[dict] = []
+
+    def snapshot(step_num: int, event_type: str, text: str,
+                 entropy_before: float) -> None:
+        ent = bu.entropy()
+        top, top_p = bu.top_recipe()
+        row = {
+            "step": step_num,
+            "type": event_type,
+            "text": text,
+            "entropy": round(ent, 4),
+            "ig": round(entropy_before - ent, 4),
+            "top_recipe": top,
+            "top_prob": round(top_p, 4),
+        }
+        for name, prob in bu.belief.items():
+            row[f"p::{name}"] = round(prob, 6)
+        history_rows.append(row)
+
+    # Step 0 — initial uniform prior
+    snapshot(step_num=0, event_type="initial", text="",
+             entropy_before=bu.entropy())
+
+    # Per-question redundancy log. Each entry is closed out at the NEXT
+    # window's observation (by computing the gap between real and shadow
+    # IG_obs). Saved to outputs/question_redundancy.csv at the end.
+    question_log: list[dict] = []
+    pending_question: dict | None = None
 
     questions_asked = 0
     print(f"\nMax entropy: {bu.max_entropy():.3f} bits")
 
-    for i, sentence in enumerate(WINDOWS, start=1):
-        print(f"\n── Window {i} ──────────────────────────────────")
-        print(f"  observation : {sentence}")
+    for i, clip_path in enumerate(WINDOWS, start=1):
+        print(f"\n── Window {i}: {clip_path.name} ──────────────────────")
 
-        # 1. Observation update
+        # 1. Observe the clip — Qwen video → one scene sentence.
+        sentence = describe_clip(clip_path, model, processor, device)
+        print(f"  observation : {sentence}")
+        if not sentence:
+            print("  [warn] VLM returned empty observation; skipping update.")
+            continue
+
+        # 2. Observation update — apply to BOTH the real and shadow updaters.
+        entropy_before_obs = bu.entropy()
+        shadow_entropy_before_obs = bu_obs_only.entropy()
+
         bu.update(sentence)
+        bu_obs_only.update(sentence)
+
+        real_ig_obs = entropy_before_obs - bu.entropy()
+        shadow_ig_obs = shadow_entropy_before_obs - bu_obs_only.entropy()
+
+        snapshot(step_num=i, event_type="observation",
+                 text=sentence, entropy_before=entropy_before_obs)
         top, p = bu.top_recipe()
-        print(f"  entropy : {bu.entropy():.4f} bits")
+        print(f"  entropy : {bu.entropy():.4f} bits  (IG_obs {real_ig_obs:+.4f})")
         print(f"  top     : {top} ({p:.3f})")
+
+        # 2b. If a question fired in the PREVIOUS window, close out its
+        # redundancy now. Redundancy = how much information the next
+        # observation would have delivered WITHOUT the question, minus how
+        # much it actually delivered WITH the question already incorporated.
+        # Unique question contribution = IG_Q − redundancy.
+        if pending_question is not None:
+            redundancy = shadow_ig_obs - real_ig_obs
+            unique_value = pending_question["ig_q"] - redundancy
+            pending_question.update({
+                "next_obs_window": i,
+                "real_ig_next_obs": round(real_ig_obs, 4),
+                "shadow_ig_next_obs": round(shadow_ig_obs, 4),
+                "redundancy": round(redundancy, 4),
+                "unique_value": round(unique_value, 4),
+            })
+            print(f"  [redundancy] Q@W{pending_question['window']}: "
+                  f"IG_Q={pending_question['ig_q']:+.3f}, "
+                  f"next-obs redundancy={redundancy:+.3f}, "
+                  f"unique value={unique_value:+.3f}")
+            question_log.append(pending_question)
+            pending_question = None
 
         # 2. CHEAP gate first — skip the VLM call when the answer is already
         # obvious. Budget gate is disabled for now (uncomment to restore).
@@ -245,7 +387,8 @@ def main():
             continue
 
         # 3. EXPENSIVE step — generate candidate questions with the VLM.
-        questions = generate_vlm_questions(bu)
+        # Uses the same loaded model as the observation step.
+        questions = generate_vlm_questions(bu, model, processor, device)
         if not questions:
             print("  [gate] No usable questions from VLM — skipping.")
             continue
@@ -301,6 +444,10 @@ def main():
 
         h_before = bu.entropy()
         bu.incorporate_answer(answer)
+        # NOTE: do NOT apply the answer to bu_obs_only — that's the whole
+        # point of the shadow updater. It only ever sees observations.
+        snapshot(step_num=i, event_type="answer",
+                 text=answer, entropy_before=h_before)
         h_after = bu.entropy()
         realised = h_before - h_after
 
@@ -315,6 +462,20 @@ def main():
             bar = "█" * int(round(prob * 30))
             print(f"        {prob:.3f}  {bar:<30}  {name}")
 
+        # Stash for next-window redundancy closure.
+        pending_question = {
+            "window": i,
+            "question": best_q["question"],
+            "answer": answer,
+            "predicted_eig": round(best_q["measured_eig"], 4),
+            "ig_q": round(realised, 4),
+            "next_obs_window": None,
+            "real_ig_next_obs": None,
+            "shadow_ig_next_obs": None,
+            "redundancy": None,
+            "unique_value": round(realised, 4),  # placeholder; overwritten on close
+        }
+
         questions_asked += 1
 
     # Final report
@@ -324,6 +485,38 @@ def main():
     print(f"Final entropy    : {bu.entropy():.4f} bits")
     print(f"Questions asked  : {questions_asked}")
     print(f"IG_Q history     : {json.dumps(bu.ig_q_log(), indent=2)}")
+
+    # If the final question never got a follow-up observation, close it out
+    # with redundancy unmeasured.
+    if pending_question is not None:
+        pending_question["redundancy"] = None
+        pending_question["unique_value"] = pending_question["ig_q"]
+        question_log.append(pending_question)
+
+    # Write per-step belief history + per-question redundancy log to CSVs.
+    outputs_dir = Path("outputs")
+    outputs_dir.mkdir(exist_ok=True)
+
+    import csv as _csv
+    if history_rows:
+        csv_path = outputs_dir / "belief_history.csv"
+        fieldnames = list(history_rows[0].keys())
+        with open(csv_path, "w", newline="", encoding="utf-8") as f:
+            writer = _csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(history_rows)
+        print(f"\nWrote belief history → {csv_path}")
+
+    if question_log:
+        q_csv = outputs_dir / "question_redundancy.csv"
+        fieldnames = list(question_log[0].keys())
+        with open(q_csv, "w", newline="", encoding="utf-8") as f:
+            writer = _csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(question_log)
+        print(f"Wrote question redundancy → {q_csv}")
+
+    print("\nPlot with: python scripts/plot_belief.py")
 
 
 if __name__ == "__main__":
