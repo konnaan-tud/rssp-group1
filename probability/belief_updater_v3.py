@@ -228,17 +228,56 @@ class BeliefUpdaterV3:
         """Strings of all observations (clips + answers) added so far, in order."""
         return [meta["sentence"] for meta in self._scene.get_sentences()]
 
-    def unseen_recipe_scenes(self, recipe_name: str) -> list[str]:
+    def unseen_recipe_scenes(
+        self,
+        recipe_name: str,
+        cosine_threshold: float = 0.75,
+    ) -> list[str]:
         """
         Recipe scene sentences (from italian_recipe_scenes.json) for
-        `recipe_name` that have not yet appeared verbatim in the observation
-        sequence. Used by the questioning pipeline to build prompt context
-        and by the planner's simulator to pick a hypothetical answer per
-        recipe.
+        `recipe_name` that have not yet been observed.
+
+        A scene is considered "observed" if SOME sentence in the observation
+        sequence has cosine similarity ≥ cosine_threshold to it. This is the
+        semantic-match version — earlier this used literal string equality,
+        which failed when the VLM paraphrased ("cracks an egg into a small
+        white cup" vs the recipe's "cracks eggs into a mixing bowl") or
+        when an answer used first person ("I am grating..." vs "A cook
+        grates...").
+
+        Used by:
+          - the questioning prompt builder (next-likely-scenes context)
+          - the planner simulator (hypothetical per-recipe answer)
         """
         scenes = self.recipe_sentences.get(recipe_name, [])
-        observed = set(self.observed_sentences())
-        return [s for s in scenes if s not in observed]
+        if not scenes:
+            return []
+
+        observed = self.observed_sentences()
+        if not observed:
+            return list(scenes)
+
+        # Embed both sets — cached, so this is essentially free after the
+        # first lookup.
+        scene_vecs = self._embedder.embed_batch(scenes)
+        obs_vecs = self._embedder.embed_batch(observed)
+
+        unseen: list[str] = []
+        for scene, s_vec in zip(scenes, scene_vecs):
+            # Highest cosine of this recipe scene against any observed sentence
+            sn = float(np.linalg.norm(s_vec))
+            best = 0.0
+            if sn > 0.0:
+                for o_vec in obs_vecs:
+                    on = float(np.linalg.norm(o_vec))
+                    if on == 0.0:
+                        continue
+                    c = float(np.dot(s_vec, o_vec) / (sn * on))
+                    if c > best:
+                        best = c
+            if best < cosine_threshold:
+                unseen.append(scene)
+        return unseen
 
     def copy(self) -> "BeliefUpdaterV3":
         """
