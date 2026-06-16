@@ -1,0 +1,69 @@
+[
+  {
+    "cluster_id": 1,
+    "size": 12,
+    "average_internal_similarity": 1.0389,
+    "recipes": [
+      "amatriciana pasta",
+      "arrabbiata pasta",
+      "broccoli garlic pasta",
+      "clam pasta",
+      "garlic oil pasta",
+      "marinara pasta",
+      "pomodoro pasta",
+      "puttanesca pasta",
+      "shrimp garlic pasta",
+      "tuna tomato pasta",
+      "vodka sauce pasta",
+      "zucchini sauce pasta"
+    ]
+  },
+  {
+    "cluster_id": 2,
+    "size": 8,
+    "average_internal_similarity": 1.0324,
+    "recipes": [
+      "alfredo pasta",
+      "butter parmesan pasta",
+      "cacio e pepe",
+      "carbonara",
+      "ham and pea pasta",
+      "lemon butter pasta",
+      "mushroom cream pasta",
+      "pea butter pasta"
+    ]
+  },
+  {
+    "cluster_id": 3,
+    "size": 2,
+    "average_internal_similarity": 1.088,
+    "recipes": [
+      "pea pesto pasta",
+      "spinach pesto pasta"
+    ]
+  },
+  {
+    "cluster_id": 4,
+    "size": 1,
+    "average_internal_similarity": 1.0,
+    "recipes": [
+      "gnocchi pesto"
+    ]
+  },
+  {
+    "cluster_id": 5,
+    "size": 1,
+    "average_internal_similarity": 1.0,
+    "recipes": [
+      "gnocchi pomodoro"
+    ]
+  },
+  {
+    "cluster_id": 6,
+    "size": 1,
+    "average_internal_similarity": 1.0,
+    "recipes": [
+      "pesto pasta"
+    ]
+  }
+]

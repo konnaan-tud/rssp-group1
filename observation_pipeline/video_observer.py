@@ -21,18 +21,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import av
+import numpy as np
 import torch
 from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
-
-try:
-    # qwen_vl_utils is the helper library shipped with Qwen2.5-VL — it
-    # extracts frames from video inputs at the right fps.
-    from qwen_vl_utils import process_vision_info
-except ImportError as e:
-    raise ImportError(
-        "qwen_vl_utils is required for video observation. Install with: "
-        "pip install qwen-vl-utils"
-    ) from e
 
 
 DEFAULT_MODEL = "Qwen/Qwen2.5-VL-7B-Instruct"
@@ -90,7 +82,7 @@ def load_qwen_vlm(model_name: str = DEFAULT_MODEL):
 
     model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
         model_name,
-        torch_dtype=torch.float16,
+        dtype=torch.float16,
     ).to(device)
     processor = AutoProcessor.from_pretrained(model_name)
 
@@ -101,6 +93,34 @@ def load_qwen_vlm(model_name: str = DEFAULT_MODEL):
 # ─────────────────────────────────────────────────────────────────────────
 # Video observation
 # ─────────────────────────────────────────────────────────────────────────
+
+def _sample_video_frames_av(
+    video_path: str | Path,
+    fps: float,
+) -> np.ndarray:
+    """
+    Decode RGB frames with PyAV.
+    """
+    container = av.open(str(Path(video_path).resolve()))
+    stream = container.streams.video[0]
+
+    native_fps = float(stream.average_rate) if stream.average_rate else 0.0
+    if native_fps <= 0.0:
+        native_fps = float(fps) if fps > 0 else 1.0
+
+    frame_interval = max(1, int(round(native_fps / max(fps, 1e-6))))
+
+    frames: list[np.ndarray] = []
+    for frame_idx, frame in enumerate(container.decode(stream)):
+        if frame_idx % frame_interval == 0:
+            frames.append(frame.to_ndarray(format="rgb24"))
+
+    container.close()
+
+    if not frames:
+        raise ValueError(f"No frames decoded from {video_path}")
+
+    return np.stack(frames, axis=0)
 
 def describe_clip(
     video_path: str | Path,
@@ -136,12 +156,11 @@ def describe_clip(
     text = processor.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=True,
     )
-    image_inputs, video_inputs = process_vision_info(messages)
-
+    video_frames = _sample_video_frames_av(video_path, fps)
     inputs = processor(
         text=[text],
-        images=image_inputs,
-        videos=video_inputs,
+        videos=[video_frames],
+        fps=fps,
         padding=True,
         return_tensors="pt",
     ).to(device)

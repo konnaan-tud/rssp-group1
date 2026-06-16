@@ -29,6 +29,7 @@ Run:
 
 from __future__ import annotations
 
+import argparse
 import json
 import re
 import sys
@@ -40,6 +41,7 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
 from probability.belief_updater_v3 import BeliefUpdaterV3
+from observation_pipeline.answer_converter import convert_answer_to_recipe_step
 from observation_pipeline.video_observer import load_qwen_vlm, describe_clip
 from questioning.questioning_pipeline import (
     build_recipe_context,
@@ -156,6 +158,40 @@ def pick_human_answer(question_text: str, bu: BeliefUpdaterV3) -> str:
     return _to_first_person(near[best_idx])
 
 
+def prompt_text_answer(question_text: str) -> str | None:
+    """
+    Prompt a human for a typed answer in the terminal.
+
+    Returning None means "skip this question for now" so the caller can
+    avoid mutating the belief state with an empty answer.
+    """
+    print(f"\n  >> Asking : {question_text}")
+    print("     type answer : enter a scene-style reply")
+    print("     skip        : type 'skip' to leave belief unchanged")
+
+    while True:
+        try:
+            raw = input("     your answer : ").strip()
+        except EOFError:
+            return None
+        if not raw:
+            print("     [input] Empty answer ignored. Type text or 'skip'.")
+            continue
+        if raw.lower() == "skip":
+            return None
+        return raw
+
+
+def get_human_answer(
+    question_text: str,
+    bu: BeliefUpdaterV3,
+    answer_mode: str = "stub",
+) -> str | None:
+    if answer_mode == "text":
+        return prompt_text_answer(question_text)
+    return pick_human_answer(question_text, bu)
+
+
 # ─────────────────────────────────────────────────────────────────────────
 # Hyperparameters
 # ─────────────────────────────────────────────────────────────────────────
@@ -265,7 +301,7 @@ def generate_vlm_questions(
 # Main loop
 # ─────────────────────────────────────────────────────────────────────────
 
-def main():
+def main(answer_mode: str = "stub"):
     # 1. Sanity check: every clip must exist before we waste 30s on model load.
     missing = [p for p in WINDOWS if not p.exists()]
     if missing:
@@ -436,10 +472,18 @@ def main():
         # planner's simulator pointed at the ground-truth recipe — so it
         # gives a scene-style answer consistent with the recipe being
         # cooked.
-        answer = pick_human_answer(best_q["question"], bu)
+        raw_answer = get_human_answer(best_q["question"], bu, answer_mode=answer_mode)
+        if raw_answer is None:
+            print("     human   : [skipped]")
+            print("     belief update skipped because no answer was provided.")
+            continue
 
-        print(f"\n  >> Asking : {best_q['question']}")
-        print(f"     human   : {answer}")
+        answer = convert_answer_to_recipe_step(raw_answer)
+
+        if answer_mode != "text":
+            print(f"\n  >> Asking : {best_q['question']}")
+        print(f"     human raw      : {raw_answer}")
+        print(f"     recipe-step    : {answer}")
         print(f"     predicted EIG : {best_q['measured_eig']:+.4f} bits")
 
         h_before = bu.entropy()
@@ -467,6 +511,7 @@ def main():
             "window": i,
             "question": best_q["question"],
             "answer": answer,
+            "raw_answer": raw_answer,
             "predicted_eig": round(best_q["measured_eig"], 4),
             "ig_q": round(realised, 4),
             "next_obs_window": None,
@@ -519,5 +564,19 @@ def main():
     print("\nPlot with: python scripts/plot_belief.py")
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run the VLM orchestrator with either stub or typed answers."
+    )
+    parser.add_argument(
+        "--answer-mode",
+        choices=["stub", "text"],
+        default="stub",
+        help="Use the built-in simulator or prompt for typed human answers.",
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(answer_mode=args.answer_mode)
