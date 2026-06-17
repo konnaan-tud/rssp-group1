@@ -1,0 +1,86 @@
+[
+  {
+    "dish": "caesar salad",
+    "scenes": [
+      "A cook tears romaine lettuce into a large bowl.",
+      "A cook shaves parmesan over the lettuce.",
+      "A cook tosses croutons into the bowl.",
+      "A cook drizzles caesar dressing over the salad.",
+      "A cook tosses the salad to coat the leaves."
+    ]
+  },
+  {
+    "dish": "caprese salad",
+    "scenes": [
+      "A cook slices ripe tomatoes onto a platter.",
+      "A cook places mozzarella slices between the tomatoes.",
+      "A cook tears basil leaves over the salad.",
+      "A cook drizzles olive oil over the platter.",
+      "A cook sprinkles salt and pepper over the salad."
+    ]
+  },
+  {
+    "dish": "greek salad",
+    "scenes": [
+      "A cook chops cucumber into a salad bowl.",
+      "A cook slices tomato wedges into the bowl.",
+      "A cook adds sliced red onion to the bowl.",
+      "A cook cubes feta cheese on top of the salad.",
+      "A cook scatters kalamata olives over the salad.",
+      "A cook drizzles olive oil and lemon over the salad."
+    ]
+  },
+  {
+    "dish": "cobb salad",
+    "scenes": [
+      "A cook chops romaine lettuce into a wide bowl.",
+      "A cook slices grilled chicken over the lettuce.",
+      "A cook places hard-boiled eggs on the salad.",
+      "A cook sprinkles crumbled bacon over the bowl.",
+      "A cook dices avocado onto the salad.",
+      "A cook drizzles vinaigrette over the salad."
+    ]
+  },
+  {
+    "dish": "nicoise salad",
+    "scenes": [
+      "A cook arranges green beans on a platter.",
+      "A cook flakes tuna over the beans.",
+      "A cook places hard-boiled eggs on the platter.",
+      "A cook scatters olives over the salad.",
+      "A cook drizzles olive oil and lemon over the salad."
+    ]
+  },
+  {
+    "dish": "fattoush salad",
+    "scenes": [
+      "A cook toasts pita bread into crispy pieces.",
+      "A cook chops cucumber into a salad bowl.",
+      "A cook chops tomato into the bowl.",
+      "A cook tears mint leaves into the bowl.",
+      "A cook drizzles sumac dressing over the salad.",
+      "A cook tosses pita pieces into the salad."
+    ]
+  },
+  {
+    "dish": "panzanella salad",
+    "scenes": [
+      "A cook tears stale bread into chunks.",
+      "A cook chops tomato into a bowl.",
+      "A cook slices cucumber into the bowl.",
+      "A cook adds red onion to the bowl.",
+      "A cook drizzles olive oil and vinegar over the bowl.",
+      "A cook tosses the salad to soak the bread."
+    ]
+  },
+  {
+    "dish": "waldorf salad",
+    "scenes": [
+      "A cook dices apple into a mixing bowl.",
+      "A cook chops celery into the bowl.",
+      "A cook adds halved grapes to the bowl.",
+      "A cook stirs walnuts into the salad.",
+      "A cook folds mayonnaise dressing through the salad."
+    ]
+  }
+]
