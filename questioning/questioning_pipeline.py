@@ -43,6 +43,7 @@ def build_recipe_context(
     active_threshold: float = 0.02,
     top_k: int = 6,
     future_scenes: int = 4,
+    asked_questions: list[str] | None = None,
 ) -> str:
     """
     Compose a compact text summary of session state for the VLM prompt.
@@ -113,6 +114,14 @@ def build_recipe_context(
         else:
             lines.append("      (all scenes already observed)")
 
+    # Show previously-asked questions so the VLM knows not to paraphrase
+    # them. Display-only — no hard filter, just transparency.
+    if asked_questions:
+        lines.append("")
+        lines.append("ALREADY ASKED THIS SESSION (do NOT repeat or paraphrase):")
+        for i, q in enumerate(asked_questions, start=1):
+            lines.append(f"  {i}. {q}")
+
     return "\n".join(lines)
 
 
@@ -136,9 +145,48 @@ TASK
 Generate exactly 3 wh-questions whose answers would reduce uncertainty
 over the current recipe belief.
 
+═══ THE 3 QUESTIONS MUST COVER DIFFERENT ASPECTS ═══
+
+Do not produce three questions of the same kind (e.g. three ingredient
+questions). Pick ONE question from each of these three categories:
+
+  1. INGREDIENT — what the cook is adding or using.
+        e.g. "Which ___ are you adding next?"
+        e.g. "What ___ is going into the bowl?"
+
+  2. METHOD or TECHNIQUE — how the cook is preparing or handling something.
+        e.g. "How are you preparing the ___?"
+        e.g. "Are you whisking, scrambling, or cooking the eggs?"
+        e.g. "Which technique are you using for the ___?"
+
+  3. SEQUENCE or ORDER — when something happens in the process.
+        e.g. "When in the process do you add the ___?"
+        e.g. "What did you do BEFORE the ___?"
+        e.g. "Will you ___ before or after ___?"
+
+When the candidate recipes SHARE INGREDIENTS but differ in METHOD or
+ORDER, ingredient questions cannot tell them apart — only method and
+sequence questions can. Use this as guidance, not a hard rule:
+
+  - If top recipes' next scenes diverge in INGREDIENT, an ingredient
+    question is usually the best rank-1.
+  - If top recipes' next scenes share the same ingredient but differ in
+    HOW it's prepared, a method question is the best rank-1.
+  - If top recipes' steps come in different ORDER, a sequence question
+    is the best rank-1.
+
+You may produce three questions all of one category if that's what the
+session actually calls for — but try to make the three questions
+discriminative, not redundant. Two near-identical questions waste a
+slot.
+
 For each question return:
   - "question":      the wh-question (starts with what/which/where/when/why/how)
   - "question_form": "wh"
+  - "category":      one of "ingredient", "method", or "sequence" — try
+                     to cover different categories across the 3 questions
+                     unless the session genuinely calls for the same
+                     category (see guidance above)
   - "targets":       2-4 scene-style sentences a cook MIGHT say as an answer.
                      Each must be drawn from the REMAINING SCENES of one
                      active candidate, or a close paraphrase of one. They
@@ -158,22 +206,46 @@ Do not ask "What recipe are you making?" or "Which recipe is this?".
   "questions": [
     {{
       "rank": 1,
-      "question": "<a wh-question about an upcoming step>",
+      "question": "<INGREDIENT question — about which item is being added>",
       "question_form": "wh",
+      "category": "ingredient",
       "targets": [
         "<scene sentence drawn from candidate A's remaining scenes>",
-        "<scene sentence drawn from candidate B's remaining scenes>",
-        "<scene sentence drawn from candidate C's remaining scenes>"
+        "<scene sentence drawn from candidate B's remaining scenes>"
       ],
-      "distinguishes": ["<candidate A>", "<candidate B>", "<candidate C>"],
+      "distinguishes": ["<candidate A>", "<candidate B>"],
       "expected_information_gain_reason": "<one-sentence reason>"
     }},
-    {{ "rank": 2, "question": "...", ... }},
-    {{ "rank": 3, "question": "...", ... }}
+    {{
+      "rank": 2,
+      "question": "<METHOD question — about how the cook is handling/preparing something>",
+      "question_form": "wh",
+      "category": "method",
+      "targets": [
+        "<scene sentence describing the technique candidate A uses>",
+        "<scene sentence describing the technique candidate B uses>"
+      ],
+      "distinguishes": ["<candidate A>", "<candidate B>"],
+      "expected_information_gain_reason": "<one-sentence reason>"
+    }},
+    {{
+      "rank": 3,
+      "question": "<SEQUENCE question — about when or in what order something happens>",
+      "question_form": "wh",
+      "category": "sequence",
+      "targets": [
+        "<scene sentence at a specific point in candidate A's order>",
+        "<scene sentence at a different point in candidate B's order>"
+      ],
+      "distinguishes": ["<candidate A>", "<candidate B>"],
+      "expected_information_gain_reason": "<one-sentence reason>"
+    }}
   ]
 }}
 
 ★ Rules ★
+  - Each of the 3 questions must use a DIFFERENT category value
+    (one "ingredient", one "method", one "sequence").
   - Replace EVERY <placeholder> with concrete content drawn from the
     SESSION CONTEXT above.
   - Targets must be scene sentences from the REMAINING SCENES list — do

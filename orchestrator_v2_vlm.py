@@ -104,22 +104,14 @@ HUMAN_STUB_NOT_AT_STEP = (
 
 
 def _to_first_person(scene: str) -> str:
-    """Convert a recipe-style sentence ('A cook cracks eggs...') to a
-    first-person human answer ('I am cracking eggs...')."""
-    return (
-        scene
-        .replace("A cook ", "I am ")
-        .replace("cracks", "cracking")
-        .replace("grates", "grating")
-        .replace("dices", "dicing")
-        .replace("cooks", "cooking")
-        .replace("pours", "pouring")
-        .replace("drops", "dropping")
-        .replace("drains", "draining")
-        .replace("transfers", "transferring")
-        .replace("stirs", "stirring")
-        .replace("tosses", "tossing")
-    )
+    """
+    DEPRECATED — kept only so older code doesn't break.
+    The orchestrator no longer converts simulator output to first-person
+    because that introduces an "I am X" vs "A cook X" embedding mismatch
+    against the recipe corpus. pick_human_answer now returns the scene
+    in its recipe form directly.
+    """
+    return scene
 
 
 def pick_human_answer(question_text: str, bu: BeliefUpdaterV3) -> str:
@@ -153,7 +145,10 @@ def pick_human_answer(question_text: str, bu: BeliefUpdaterV3) -> str:
     if best_cos < HUMAN_STUB_MIN_COSINE:
         return HUMAN_STUB_NOT_AT_STEP
 
-    return _to_first_person(near[best_idx])
+    # Return the recipe scene as-is, in third-person ("A cook X.") form.
+    # No conversion to first-person — the embedding form must match the
+    # recipe corpus to avoid a similarity gap.
+    return near[best_idx]
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -219,10 +214,16 @@ def parse_vlm_questions(raw_response: str) -> list[dict]:
             continue
         targets = q.get("targets", [])
         distinguishes = q.get("distinguishes", [])
+        category = q.get("category", "")
+        if isinstance(category, str):
+            category = category.strip().lower()
+        if category not in ("ingredient", "method", "sequence"):
+            category = "unspecified"
         clean.append({
             "rank":          q.get("rank", i + 1),
             "question":      question_text,
             "question_form": q.get("question_form", "wh"),
+            "category":      category,
             "targets":       targets if isinstance(targets, list) else [],
             "distinguishes": distinguishes if isinstance(distinguishes, list) else [],
         })
@@ -414,7 +415,8 @@ def main():
         # Total EIG = sum of weighted contributions across the top-k branches.
         print("\n  candidate questions (with EIG breakdown):")
         for q in ranked:
-            print(f"    EIG {q['measured_eig']:+.3f} bits  |  {q['question']}")
+            cat = q.get("category", "unspecified")
+            print(f"    EIG {q['measured_eig']:+.3f} bits  |  [{cat}]  {q['question']}")
             for b in q["branches"]:
                 if b["answer"] is None:
                     print(f"        - {b['recipe']:<28} p={b['p']:.3f}  "
@@ -442,6 +444,15 @@ def main():
         print(f"     human   : {answer}")
         print(f"     predicted EIG : {best_q['measured_eig']:+.4f} bits")
 
+        # IMPORTANT: when the human says the question doesn't apply yet,
+        # we explicitly do NOT update the belief. Embedding that generic
+        # sentence produces spurious IG (~0.5 bits) from idiosyncratic
+        # cosine noise, not real information. Skip it instead.
+        if answer == HUMAN_STUB_NOT_AT_STEP:
+            print(f"     [skip] Human said the question doesn't apply — "
+                  f"NO belief update, no IG_Q recorded.")
+            continue
+
         h_before = bu.entropy()
         bu.incorporate_answer(answer)
         # NOTE: do NOT apply the answer to bu_obs_only — that's the whole
@@ -466,6 +477,7 @@ def main():
         pending_question = {
             "window": i,
             "question": best_q["question"],
+            "category": best_q.get("category", "unspecified"),
             "answer": answer,
             "predicted_eig": round(best_q["measured_eig"], 4),
             "ig_q": round(realised, 4),
@@ -480,8 +492,12 @@ def main():
 
     # Final report
     top, p = bu.top_recipe()
+    is_correct = (top == GROUND_TRUTH)
+    accuracy = 1 if is_correct else 0
     print("\n" + "═" * 60)
-    print(f"Final prediction : {top} ({p:.4f})")
+    print(f"Ground truth     : {GROUND_TRUTH}")
+    print(f"Final prediction : {top} (p={p:.4f})")
+    print(f"Accuracy (Acc)   : {accuracy}  ({'CORRECT' if is_correct else 'WRONG'})")
     print(f"Final entropy    : {bu.entropy():.4f} bits")
     print(f"Questions asked  : {questions_asked}")
     print(f"IG_Q history     : {json.dumps(bu.ig_q_log(), indent=2)}")
@@ -515,6 +531,36 @@ def main():
             writer.writeheader()
             writer.writerows(question_log)
         print(f"Wrote question redundancy → {q_csv}")
+
+    # Append a one-row summary to session_summary.csv. Lets the supervisor
+    # aggregate accuracy across many sessions for the wh-vs-polar experiment.
+    import datetime as _dt
+    summary_csv = outputs_dir / "session_summary.csv"
+    summary_row = {
+        "timestamp": _dt.datetime.now().isoformat(timespec="seconds"),
+        "ground_truth": GROUND_TRUTH,
+        "predicted": top,
+        "accuracy": accuracy,
+        "predicted_prob": round(p, 4),
+        "final_entropy": round(bu.entropy(), 4),
+        "questions_asked": questions_asked,
+        "n_recipes": bu.N,
+        "n_windows": len(WINDOWS),
+        "total_ig_q": round(
+            sum(q.get("ig_q", 0) or 0 for q in bu.ig_q_log()), 4
+        ),
+        "total_unique_value": round(
+            sum(q.get("unique_value", 0) or 0 for q in question_log), 4
+        ),
+    }
+    summary_fields = list(summary_row.keys())
+    write_header = not summary_csv.exists()
+    with open(summary_csv, "a", newline="", encoding="utf-8") as f:
+        writer = _csv.DictWriter(f, fieldnames=summary_fields)
+        if write_header:
+            writer.writeheader()
+        writer.writerow(summary_row)
+    print(f"Appended session summary → {summary_csv}")
 
     print("\nPlot with: python scripts/plot_belief.py")
 

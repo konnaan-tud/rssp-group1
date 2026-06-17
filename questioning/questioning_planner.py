@@ -53,6 +53,23 @@ def _cosine(a: np.ndarray, b: np.ndarray) -> float:
 # early scenes are observed — see _adaptive_window() below.
 NEAR_FUTURE_WINDOW = 3
 
+# The simulator's APPLICABLE_MIN_COSINE (set below) controls which branches
+# return None. The EIG is then scaled by the fraction of top-k belief MASS
+# that can actually answer the question — heavy discount if most recipes
+# (by belief) can't answer. Set to 1.0 to disable, 0.5 to require half of
+# the mass to be answerable for full credit.
+MIN_ANSWERABLE_MASS_FRACTION = 0.5
+
+# Minimum cosine between the question and the best near-future scene for
+# the planner to consider this recipe-branch "applicable" to the question.
+# If the best cosine is below this, simulate_answer returns None, the
+# branch contributes zero to EIG, and if every top-k branch returns None
+# the question's overall EIG comes out at 0 → gate skips. This is the
+# planner-level analogue of the human stub's "doesn't apply" fallback, and
+# it prevents questions that don't fit the session state from ever being
+# asked.
+APPLICABLE_MIN_COSINE = 0.35
+
 
 def _adaptive_window(
     belief_updater: BeliefUpdaterV3,
@@ -83,6 +100,7 @@ def simulate_answer(
     recipe_name: str,
     belief_updater: BeliefUpdaterV3,
     near_future_window: int | None = None,
+    min_cosine: float = APPLICABLE_MIN_COSINE,
 ) -> str | None:
     """
     Hypothetical scene-style answer the human would give if `recipe_name`
@@ -92,15 +110,16 @@ def simulate_answer(
       1. Take the recipe's UNSEEN scenes (semantic-match — handled by
          BeliefUpdaterV3.unseen_recipe_scenes).
       2. Restrict to the next K scenes, where K = `_adaptive_window(...)`
-         if no explicit override is passed. Default behaviour grows K as
-         more of the recipe's scenes are observed.
+         if no explicit override is passed.
       3. Pick the one whose embedding is most semantically similar to the
          question.
-      4. If nothing is unseen, return None.
-
-    The default adaptive K replaces the previous fixed K=3 — it lets the
-    planner reach later recipe scenes when the early ones are already
-    confirmed, which is what makes "ambiguous twin" questions scorable.
+      4. APPLICABILITY CHECK — if that best cosine is below `min_cosine`,
+         return None. The question doesn't fit any of this recipe's
+         near-future scenes, so the cook wouldn't answer it naturally.
+         Returning None propagates "no useful answer" to expected_information_gain
+         which gives the branch zero contribution. If every top-k branch
+         is None, the question's overall EIG comes out at 0 and the gate
+         correctly skips it — no wasted VLM call, no doesn't-apply turn.
     """
     question_text = (question.get("question") or "").strip()
     if not question_text:
@@ -123,6 +142,13 @@ def simulate_answer(
 
     cosines = [_cosine(q_vec, v) for v in scene_vecs]
     best_idx = int(max(range(len(cosines)), key=lambda i: cosines[i]))
+    best_cos = cosines[best_idx]
+
+    # Applicability check: low cosine means the question doesn't fit this
+    # recipe's near-future. Treat as no answer.
+    if best_cos < min_cosine:
+        return None
+
     return near[best_idx]
 
 
@@ -181,6 +207,29 @@ def expected_information_gain(
             "h_after": round(h_after, 4),
             "delta_h": round(delta, 4),
         })
+
+    # Answerability gate: scale EIG by the fraction of top-k BELIEF MASS
+    # that can actually answer this question. If most top-k branches
+    # returned None (no applicable scene), the question is mostly
+    # off-topic at this point in the session, and the gate should skip it.
+    #
+    # The scaling is gentle when most mass can answer (close to 1.0) and
+    # aggressive when only a minority can (small multiplier). A question
+    # with 30% answerable mass keeps 30% of its raw EIG. This naturally
+    # ties EIG to the question's practical applicability.
+    total_mass = sum(b["p"] for b in branches)
+    answerable_mass = sum(
+        b["p"] for b in branches if b["answer"] is not None
+    )
+    if total_mass > 0:
+        answerability = answerable_mass / total_mass
+    else:
+        answerability = 0.0
+
+    # When most mass is answerable (>= MIN_ANSWERABLE_MASS_FRACTION), no
+    # penalty. Below that, scale linearly.
+    if answerability < MIN_ANSWERABLE_MASS_FRACTION:
+        eig *= answerability
 
     return eig, branches
 
