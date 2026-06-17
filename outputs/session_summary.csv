@@ -1,0 +1,4 @@
+timestamp,ground_truth,predicted,accuracy,predicted_prob,final_entropy,questions_asked,n_recipes,n_windows,total_ig_q,total_unique_value
+2026-06-17T17:11:48,carbonara,carbonara,1,0.5239,2.548,2,29,9,0.6552,-0.3538
+2026-06-17T17:27:43,polar,carbonara,carbonara,1,0.8195,1.1198,4,29,9,3.5703,1.0715
+2026-06-17T17:42:37,obs_only,carbonara,carbonara,1,0.5343,2.3717,0,29,9,0.0,0.0

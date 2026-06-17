@@ -1,47 +1,45 @@
 """
 observation_pipeline/video_observer.py
 --------------------------------------
-Runs Qwen2.5-VL on a single cooking video clip and returns a one-sentence
-scene description in the format used by the recipe database.
+Ollama-backed version. Replaces the HuggingFace transformers loader with
+calls to a local Ollama instance running qwen2.5vl:7b.
 
-Used by the orchestrator to convert each WINDOW (a video clip) into a
-scene sentence consumable by BeliefUpdaterV3.
+Video observation:
+  - Frames are extracted from each clip with PyAV at DEFAULT_FPS.
+  - Frames are JPEG-encoded and base64-encoded, then sent to Ollama's
+    /api/chat endpoint as images in the message payload.
+  - Ollama handles quantisation internally (~6GB VRAM vs ~15GB for float16).
 
-Design:
-  - load_qwen_vlm()      → load Qwen2.5-VL model + processor once at session
-                            start. Returns (model, processor, device).
-  - describe_clip(path)  → run inference on one clip, return a sentence
-                            like "A cook cracks eggs into a mixing bowl."
-
-Sharing the loaded model with the questioning pipeline (which also uses
-Qwen2.5-VL) avoids paying the ~30s load cost on every call.
+Function signatures are identical to the transformers version so the
+orchestrators require no changes:
+  load_qwen_vlm()          → (model_name, None, "ollama")
+  describe_clip(path, ...) → one scene sentence string
 """
 
 from __future__ import annotations
 
+import base64
+import io
 from pathlib import Path
 
-import torch
-from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
+import av
+import requests
+from PIL import Image
 
-try:
-    # qwen_vl_utils is the helper library shipped with Qwen2.5-VL — it
-    # extracts frames from video inputs at the right fps.
-    from qwen_vl_utils import process_vision_info
-except ImportError as e:
-    raise ImportError(
-        "qwen_vl_utils is required for video observation. Install with: "
-        "pip install qwen-vl-utils"
-    ) from e
+# ─────────────────────────────────────────────────────────────────────────
+# Configuration
+# ─────────────────────────────────────────────────────────────────────────
 
+OLLAMA_URL   = "http://localhost:11434"   # default Ollama address
+OLLAMA_MODEL = "qwen2.5vl:7b"
 
-DEFAULT_MODEL = "Qwen/Qwen2.5-VL-7B-Instruct"
-DEFAULT_FPS = 1.0           # frames per second extracted from each clip
-MAX_NEW_TOKENS_OBS = 64     # observation output is short — caps verbosity
+DEFAULT_FPS        = 1.0    # frames per second sampled from each clip
+MAX_FRAMES         = 8      # hard cap — keeps payloads manageable
+MAX_NEW_TOKENS_OBS = 64     # short cap; scene sentences are brief
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Observation prompt
+# Observation prompt — unchanged from transformers version
 # ─────────────────────────────────────────────────────────────────────────
 
 OBSERVATION_PROMPT = """You are watching a short cooking video clip. In ONE present-tense sentence, describe what the cook is doing.
@@ -67,99 +65,170 @@ Rules:
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Model loader (shared with questioning pipeline)
+# Ollama connectivity check
 # ─────────────────────────────────────────────────────────────────────────
 
-def _pick_device() -> str:
-    if torch.backends.mps.is_available():
-        return "mps"
-    if torch.cuda.is_available():
-        return "cuda"
-    return "cpu"
-
-
-def load_qwen_vlm(model_name: str = DEFAULT_MODEL):
+def load_qwen_vlm(model_name: str = OLLAMA_MODEL):
     """
-    Load Qwen2.5-VL once. Returns (model, processor, device).
+    For Ollama, there is no model to load into memory — Ollama manages
+    the model as a server-side process. This function verifies that Ollama
+    is reachable and that the requested model is available, then returns
+    (model_name, None, "ollama") to keep the orchestrator call-sites intact.
 
-    The same model handles both video-to-text (observation) and text-only
-    (question generation), so this loader is reused by both paths.
+    Parameters
+    ----------
+    model_name : Ollama model tag, e.g. "qwen2.5vl:7b"
     """
-    device = _pick_device()
-    print(f"[VLM] Loading {model_name} on {device}...", flush=True)
+    print(f"[VLM] Checking Ollama at {OLLAMA_URL} ...", flush=True)
 
-    model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-        model_name,
-        torch_dtype=torch.float16,
-    ).to(device)
-    processor = AutoProcessor.from_pretrained(model_name)
+    # Ping Ollama
+    try:
+        r = requests.get(f"{OLLAMA_URL}/api/tags", timeout=5)
+        r.raise_for_status()
+    except requests.exceptions.ConnectionError:
+        raise RuntimeError(
+            f"Ollama is not running. Start it with: ollama serve\n"
+            f"  (expected at {OLLAMA_URL})"
+        )
+    except requests.exceptions.Timeout:
+        raise RuntimeError(f"Ollama did not respond within 5 s at {OLLAMA_URL}.")
 
-    print("[VLM] Ready.", flush=True)
-    return model, processor, device
+    # Check the model is pulled
+    available = [m["name"] for m in r.json().get("models", [])]
+    # Ollama may list the model with or without the tag suffix
+    base = model_name.split(":")[0]
+    if not any(base in name for name in available):
+        raise RuntimeError(
+            f"Model '{model_name}' not found in Ollama.\n"
+            f"  Pull it with: ollama pull {model_name}\n"
+            f"  Available models: {available}"
+        )
+
+    print(f"[VLM] Ollama ready — model: {model_name}", flush=True)
+    # Return (model_name, None, "ollama") to keep orchestrator signatures intact.
+    # Callers receive these three values and pass them to describe_clip /
+    # generate_text_with_model, which detect device == "ollama" and route
+    # to the Ollama API instead of a local torch model.
+    return model_name, None, "ollama"
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Video observation
+# Frame extraction
+# ─────────────────────────────────────────────────────────────────────────
+
+def _extract_frames_b64(
+    video_path: str | Path,
+    fps: float = DEFAULT_FPS,
+    max_frames: int = MAX_FRAMES,
+) -> list[str]:
+    """
+    Extract up to `max_frames` frames from `video_path` at `fps` rate.
+    Returns a list of base64-encoded JPEG strings ready for the Ollama
+    image payload. Returns [] on any read error.
+    """
+    frames_b64: list[str] = []
+
+    try:
+        container = av.open(str(video_path))
+    except Exception as e:
+        print(f"  [video] Could not open {video_path}: {e}")
+        return []
+
+    try:
+        video_stream = container.streams.video[0]
+        video_stream.thread_type = "AUTO"
+
+        interval   = 1.0 / max(fps, 0.1)
+        last_t     = -interval   # ensure first frame is always captured
+
+        for frame in container.decode(video=0):
+            if len(frames_b64) >= max_frames:
+                break
+
+            # Compute timestamp in seconds
+            if frame.pts is not None and frame.time_base is not None:
+                t = float(frame.pts * frame.time_base)
+            else:
+                t = last_t + interval   # fallback: accept the frame
+
+            if t - last_t < interval:
+                continue
+            last_t = t
+
+            # Convert to PIL, downscale, JPEG-encode, base64-encode
+            img = frame.to_image().convert("RGB")
+            img.thumbnail((640, 480), Image.LANCZOS)
+
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=80)
+            frames_b64.append(base64.b64encode(buf.getvalue()).decode("utf-8"))
+
+    except Exception as e:
+        print(f"  [video] Frame extraction error: {e}")
+    finally:
+        container.close()
+
+    return frames_b64
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Video observation via Ollama
 # ─────────────────────────────────────────────────────────────────────────
 
 def describe_clip(
     video_path: str | Path,
-    model,
-    processor,
-    device: str,
+    model,            # model_name string returned by load_qwen_vlm
+    processor,        # unused (None) — kept for signature compatibility
+    device: str,      # "ollama" — kept for signature compatibility
     fps: float = DEFAULT_FPS,
     max_new_tokens: int = MAX_NEW_TOKENS_OBS,
 ) -> str:
     """
-    Run Qwen2.5-VL on `video_path` and return a one-sentence scene
-    description. Caller is responsible for loading model + processor once
-    via load_qwen_vlm().
+    Describe a cooking clip in one sentence via Ollama.
 
-    Parameters
-    ----------
-    video_path : path to an mp4 (or other ffmpeg-readable) clip
-    fps        : frames per second sampled from the clip (1.0 is enough
-                 for typical 5s cooking actions)
+    Extracts frames with PyAV, sends them as images to Ollama's /api/chat
+    endpoint, and returns the cleaned scene sentence.
     """
-    video_path = str(Path(video_path).resolve())
+    frames_b64 = _extract_frames_b64(video_path, fps)
+    if not frames_b64:
+        print(f"  [video] No frames extracted from {video_path} — skipping.")
+        return ""
 
-    messages = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "video", "video": video_path, "fps": fps},
-                {"type": "text", "text": OBSERVATION_PROMPT},
-            ],
-        }
-    ]
+    print(f"  [video] Sending {len(frames_b64)} frame(s) to Ollama...", flush=True)
 
-    text = processor.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True,
-    )
-    image_inputs, video_inputs = process_vision_info(messages)
+    payload = {
+        "model":   model,
+        "messages": [
+            {
+                "role":    "user",
+                "content": OBSERVATION_PROMPT,
+                "images":  frames_b64,
+            }
+        ],
+        "stream":  False,
+        "options": {"num_predict": max_new_tokens},
+    }
 
-    inputs = processor(
-        text=[text],
-        images=image_inputs,
-        videos=video_inputs,
-        padding=True,
-        return_tensors="pt",
-    ).to(device)
+    try:
+        r = requests.post(
+            f"{OLLAMA_URL}/api/chat",
+            json=payload,
+            timeout=120,
+        )
+        r.raise_for_status()
+    except requests.exceptions.Timeout:
+        print("  [video] Ollama request timed out.")
+        return ""
+    except requests.exceptions.RequestException as e:
+        print(f"  [video] Ollama request failed: {e}")
+        return ""
 
-    with torch.inference_mode():
-        generated_ids = model.generate(**inputs, max_new_tokens=max_new_tokens)
-
-    trimmed = generated_ids[:, inputs.input_ids.shape[1]:]
-    response = processor.batch_decode(
-        trimmed,
-        skip_special_tokens=True,
-        clean_up_tokenization_spaces=False,
-    )[0]
-    return _clean_sentence(response)
+    raw = r.json().get("message", {}).get("content", "")
+    return _clean_sentence(raw)
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Output cleaning
+# Output cleaning — unchanged
 # ─────────────────────────────────────────────────────────────────────────
 
 def _clean_sentence(raw: str) -> str:
@@ -171,7 +240,6 @@ def _clean_sentence(raw: str) -> str:
     """
     s = raw.strip().strip('"').strip("'").strip()
 
-    # Pick the first sentence
     for sep in (".", "?", "!"):
         if sep in s:
             s = s.split(sep, 1)[0]
@@ -180,7 +248,6 @@ def _clean_sentence(raw: str) -> str:
 
     if not s:
         return ""
-
     if not s.endswith("."):
         s = s + "."
     return s

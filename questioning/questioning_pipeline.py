@@ -27,11 +27,10 @@ import json
 import math
 from pathlib import Path
 
-import torch
-from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
+import requests
 
-
-DEFAULT_MODEL = "Qwen/Qwen2.5-VL-7B-Instruct"
+OLLAMA_URL   = "http://localhost:11434"   # default Ollama address
+OLLAMA_MODEL = "qwen2.5vl:7b"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -357,76 +356,64 @@ Do not ask "Are you making carbonara?" or name a recipe directly.
 
     return prompt.strip()
 # ═══════════════════════════════════════════════════════════════════════════
+# Ollama runner
+# ═══════════════════════════════════════════════════════════════════════════
 
 def generate_text_with_model(
     prompt: str,
-    model,
-    processor,
-    device: str,
+    model,            # model_name string returned by load_qwen_vlm
+    processor,        # unused (None) — kept for signature compatibility
+    device: str,      # "ollama" — kept for signature compatibility
     max_new_tokens: int = 768,
 ) -> str:
     """
-    Text-only generation against an already-loaded Qwen2.5-VL model.
-    Used by the orchestrator when it has loaded the VLM once (via
-    observation_pipeline.video_observer.load_qwen_vlm) and wants to reuse
-    that load for question generation.
+    Text-only generation via Ollama. Replaces the transformers
+    generate_text_with_model — same signature, Ollama backend.
+
+    `model` here is the model name string (e.g. "qwen2.5vl:7b") returned
+    by load_qwen_vlm(). `processor` and `device` are unused but kept so
+    the orchestrators need no changes.
     """
-    messages = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": prompt},
-            ],
-        }
-    ]
-    text = processor.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True,
-    )
-    inputs = processor(
-        text=[text], return_tensors="pt", padding=True,
-    ).to(device)
+    payload = {
+        "model":   model,
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
+        "stream":  False,
+        "options": {"num_predict": max_new_tokens},
+    }
 
     print("Generating...", flush=True)
 
-    with torch.inference_mode():
-        generated_ids = model.generate(**inputs, max_new_tokens=max_new_tokens)
+    try:
+        r = requests.post(
+            f"{OLLAMA_URL}/api/chat",
+            json=payload,
+            timeout=180,    # question generation prompts are long
+        )
+        r.raise_for_status()
+    except requests.exceptions.Timeout:
+        print("  [VLM] Ollama request timed out.")
+        return ""
+    except requests.exceptions.RequestException as e:
+        print(f"  [VLM] Ollama request failed: {e}")
+        return ""
 
-    trimmed = generated_ids[:, inputs.input_ids.shape[1]:]
-    response = processor.batch_decode(
-        trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False,
-    )[0]
-    return response
+    return r.json().get("message", {}).get("content", "")
 
 
 def run_qwen_prompt(
     prompt: str,
-    model_name: str = DEFAULT_MODEL,
+    model_name: str = OLLAMA_MODEL,
     max_new_tokens: int = 768,
 ) -> str:
     """
-    Backwards-compatible wrapper: loads Qwen2.5-VL fresh and runs a text
-    prompt. Prefer load_qwen_vlm() + generate_text_with_model() for any
-    workflow that runs more than one VLM call per session.
+    Backwards-compatible wrapper: runs a text prompt via Ollama.
+    Prefer load_qwen_vlm() + generate_text_with_model() for session use.
     """
-    if torch.backends.mps.is_available():
-        device = "mps"
-    elif torch.cuda.is_available():
-        device = "cuda"
-    else:
-        device = "cpu"
-
-    print(f"Loading {model_name} on {device}...", flush=True)
-    model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-        model_name,
-        torch_dtype=torch.float16,
-    ).to(device)
-    processor = AutoProcessor.from_pretrained(model_name)
-    print("Model ready.", flush=True)
-
-    response = generate_text_with_model(
-        prompt, model, processor, device, max_new_tokens=max_new_tokens,
+    return generate_text_with_model(
+        prompt, model_name, None, "ollama", max_new_tokens=max_new_tokens,
     )
-    return response
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -434,7 +421,7 @@ def run_qwen_prompt(
 # ═══════════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
-    # Print the context + prompt without calling Qwen. Useful for fast
+    # Print the context + prompt without calling Ollama. Useful for fast
     # iteration on the prompt wording.
     import os, sys
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

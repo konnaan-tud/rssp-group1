@@ -1,0 +1,5 @@
+window,question,question_form,answer_type,proposition,category,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value
+1,Are you adding cream next?,polar,yes,A cook pours cream into the skillet.,ingredient,0.4163,1.2495,2,-0.4593,0.9466,1.4059,-0.1564
+2,Are you adding pecorino next?,polar,yes,A cook grates pecorino into the mixing bowl.,ingredient,0.6715,1.0422,3,0.09,1.1727,1.0827,-0.0405
+7,Will you toss the pasta with the egg mixture?,polar,yes,A cook pours the egg mixture over the pasta.,sequence,0.2095,0.2364,8,0.1962,0.1235,-0.0727,0.3091
+8,Are you whisking the eggs rather than scrambling them?,polar,no,A cook cracks an egg into a small bowl.,method,0.6483,1.0422,9,-0.0153,0.0676,0.0829,0.9593
