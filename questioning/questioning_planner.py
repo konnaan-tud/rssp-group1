@@ -152,6 +152,41 @@ def simulate_answer(
     return near[best_idx]
 
 
+def simulate_polar_answer(
+    question: dict,
+    recipe_name: str,
+    belief_updater: BeliefUpdaterV3,
+    min_cosine: float = APPLICABLE_MIN_COSINE,
+) -> str | None:
+    """
+    Polar analogue of simulate_answer. Returns "yes" or "no" — what
+    `recipe_name` would answer to the question's asserted proposition — or
+    None if the proposition is irrelevant to this recipe's near-future (no
+    credit, branch contributes zero to EIG).
+
+    "yes" iff the asserted proposition matches one of the recipe's adaptive
+    near-future scenes above min_cosine; otherwise "no". The None case mirrors
+    simulate_answer's applicability check: if the proposition is far outside
+    this recipe's near-future, the cook couldn't meaningfully answer.
+    """
+    proposition = (question.get("proposition") or "").strip()
+    if not proposition:
+        return None
+
+    unseen = belief_updater.unseen_recipe_scenes(recipe_name)
+    if not unseen:
+        return None
+
+    window = _adaptive_window(belief_updater, recipe_name)
+    near = unseen[:max(1, window)]
+
+    p_vec = belief_updater._embedder.embed(proposition)
+    scene_vecs = belief_updater._embedder.embed_batch(near)
+    best_cos = max(_cosine(p_vec, v) for v in scene_vecs)
+
+    return "yes" if best_cos >= min_cosine else "no"
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Expected Information Gain
 # ═══════════════════════════════════════════════════════════════════════════
@@ -160,6 +195,7 @@ def expected_information_gain(
     question: dict,
     belief_updater: BeliefUpdaterV3,
     top_k: int = 5,
+    polar: bool = False,
 ) -> tuple[float, list[dict]]:
     """
     Measured EIG of `question` under the current belief.
@@ -167,6 +203,11 @@ def expected_information_gain(
     Iterates over the top-k recipes by current belief, simulates each
     recipe's answer to the question, applies it to a *copy* of the belief
     updater, and averages H(B) − H(B | a) weighted by P(r).
+
+    When polar=True, each recipe answers "yes"/"no" to the question's
+    proposition: "yes" is incorporated as an observation (the affirmed
+    proposition), "no" via incorporate_negative_answer (persistent penalty).
+    When polar=False, the wh path returns a scene-style answer.
 
     Returns (eig, per_branch_details). Each branch dict captures the
     simulated answer, predicted posterior entropy, and ΔH — useful for
@@ -180,7 +221,11 @@ def expected_information_gain(
     eig = 0.0
     branches: list[dict] = []
     for recipe_name, p_r in candidates:
-        ans = simulate_answer(question, recipe_name, belief_updater)
+        if polar:
+            ans = simulate_polar_answer(question, recipe_name, belief_updater)
+        else:
+            ans = simulate_answer(question, recipe_name, belief_updater)
+
         if ans is None:
             # Nothing to simulate — treat as zero contribution.
             branches.append({
@@ -195,7 +240,13 @@ def expected_information_gain(
         # Simulate on a copy; suppress any prints from incorporate_answer.
         clone = belief_updater.copy()
         with contextlib.redirect_stdout(io.StringIO()):
-            clone.incorporate_answer(ans)
+            if polar:
+                if ans == "yes":
+                    clone.incorporate_answer(question["proposition"])
+                else:
+                    clone.incorporate_negative_answer(question["proposition"])
+            else:
+                clone.incorporate_answer(ans)
         h_after = clone.entropy()
         delta = h_now - h_after
 
@@ -238,6 +289,7 @@ def rank_questions(
     questions: list[dict],
     belief_updater: BeliefUpdaterV3,
     top_k: int = 5,
+    polar: bool = False,
 ) -> list[dict]:
     """
     Annotate each candidate question with measured EIG and per-branch
@@ -249,7 +301,9 @@ def rank_questions(
     """
     ranked = []
     for q in questions:
-        eig, branches = expected_information_gain(q, belief_updater, top_k)
+        eig, branches = expected_information_gain(
+            q, belief_updater, top_k, polar=polar
+        )
         ranked.append({
             **q,
             "measured_eig": round(eig, 4),
@@ -271,6 +325,7 @@ def should_ask(
     questions_asked: int = 0,
     max_questions: int = 2,
     top_k: int = 5,
+    polar: bool = False,
 ) -> tuple[bool, dict | None, list[dict]]:
     """
     Combined gate. Ask iff *all three* hold:
@@ -289,7 +344,7 @@ def should_ask(
     if belief_updater.entropy() < entropy_threshold:
         return False, None, []  # already confident — don't bother the cook
 
-    ranked = rank_questions(questions, belief_updater, top_k)
+    ranked = rank_questions(questions, belief_updater, top_k, polar=polar)
     if not ranked or ranked[0]["measured_eig"] < eig_threshold:
         # Nothing on offer would help. Better to wait for more observations.
         return False, None, ranked

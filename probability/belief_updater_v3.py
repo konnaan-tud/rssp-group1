@@ -44,6 +44,15 @@ from probability.similarity import hybrid_similarity
 RECIPE_SEQUENCES_PATH = os.path.join("data", "recipe_sequences.json")
 RECIPE_SCENES_PATH = os.path.join("data", "italian_recipe_scenes.json")
 
+# Fixed penalty strength for a "no" answer in the polar condition. Held
+# constant across ALL polar sessions for the same reason temperature is
+# fixed: IG values must stay on one scale to be comparable. Subtracted from
+# a recipe's raw hybrid similarity (before the contrastive mean) in
+# proportion to how strongly that recipe's near-future matches the negated
+# proposition. Tuned once against the carbonara clips, then frozen.
+NEGATION_PENALTY = 0.5
+NEGATION_MATCH_THRESHOLD = 0.5   # cosine below this = recipe unaffected by the "no"
+
 
 class BeliefUpdaterV3:
     """
@@ -114,6 +123,16 @@ class BeliefUpdaterV3:
         self._last_similarities: dict[str, float] = {}
         self._last_contrastive: dict[str, float] = {}
 
+        # Persistent negative evidence: scene propositions the human said
+        # "no" to (polar condition). Unlike self.belief, these survive every
+        # recompute because they live in the evidence, not the distribution —
+        # so a "no" is not wiped out by the next observation. The penalty is
+        # re-applied inside _recompute() each step.
+        self._negations: list[str] = []
+        # Cache of negation embeddings (parallel to self._negations) so the
+        # penalty loop doesn't re-embed every recompute.
+        self._negation_vecs: list[np.ndarray] = []
+
         print(f"[BeliefUpdaterV3] Loaded {self.N} recipes.")
         print(f"[BeliefUpdaterV3] Temperature: {self.temperature}")
 
@@ -165,6 +184,34 @@ class BeliefUpdaterV3:
 
         return result
 
+    def incorporate_negative_answer(self, proposition: str) -> dict[str, float]:
+        """
+        Incorporate a polar "no": the human denied `proposition` (a scene-style
+        statement, e.g. "A cook adds cream to the pan").
+
+        Unlike incorporate_answer, the proposition is NOT appended to the
+        observation sequence — a denial is not an observation. Instead it is
+        stored in self._negations and re-applied as a similarity penalty on
+        every subsequent recompute (see _recompute). IG_Q is logged the same
+        way so polar "no" answers produce a measurable dependent variable.
+        """
+        self._entropy_before_answer = self.entropy()
+
+        self._negations.append(proposition)
+        self._negation_vecs.append(self._embedder.embed(proposition))
+        result = self._recompute()
+
+        entropy_after = self.entropy()
+        ig = self._entropy_before_answer - entropy_after
+        self._ig_q_log.append({
+            "answer": f"NO: {proposition}",
+            "entropy_before": round(self._entropy_before_answer, 4),
+            "entropy_after": round(entropy_after, 4),
+            "ig_q": round(ig, 4),
+        })
+
+        return result
+
     def entropy(self) -> float:
         """Shannon entropy of current belief in bits."""
         return -sum(
@@ -209,6 +256,8 @@ class BeliefUpdaterV3:
         self._ig_q_log = []
         self._last_similarities = {}
         self._last_contrastive = {}
+        self._negations = []
+        self._negation_vecs = []
 
     def summary(self) -> dict:
         top, prob = self.top_recipe()
@@ -307,6 +356,8 @@ class BeliefUpdaterV3:
         clone._ig_q_log = []
         clone._last_similarities = dict(self._last_similarities)
         clone._last_contrastive = dict(self._last_contrastive)
+        clone._negations = list(self._negations)
+        clone._negation_vecs = list(self._negation_vecs)
         return clone
 
     # ── Internal ───────────────────────────────────────────────────────────
@@ -344,6 +395,34 @@ class BeliefUpdaterV3:
             name: round(float(similarities[i]), 4)
             for i, name in enumerate(self.recipe_names)
         }
+
+        # Negative evidence (polar "no"): for each negated proposition, pull
+        # down every recipe whose near-future scenes match it. Applied to raw
+        # similarities BEFORE the contrastive mean so the whole vector stays
+        # on the fixed-temperature scale and IG remains comparable. Recorded
+        # AFTER _last_similarities so the logged raw scores stay penalty-free.
+        if self._negation_vecs:
+            penalties = np.zeros(self.N, dtype=np.float32)
+            for i, name in enumerate(self.recipe_names):
+                unseen = self.unseen_recipe_scenes(name)
+                if not unseen:
+                    continue
+                scene_vecs = self._embedder.embed_batch(unseen)
+                worst = 0.0  # strongest match to ANY negated proposition
+                for neg_vec in self._negation_vecs:
+                    nn = float(np.linalg.norm(neg_vec))
+                    if nn == 0.0:
+                        continue
+                    for sv in scene_vecs:
+                        sn = float(np.linalg.norm(sv))
+                        if sn == 0.0:
+                            continue
+                        c = float(np.dot(neg_vec, sv) / (nn * sn))
+                        if c > worst:
+                            worst = c
+                if worst >= NEGATION_MATCH_THRESHOLD:
+                    penalties[i] = NEGATION_PENALTY * worst
+            similarities = similarities - penalties
 
         # Contrastive normalisation — subtract mean
         contrastive = similarities - similarities.mean()

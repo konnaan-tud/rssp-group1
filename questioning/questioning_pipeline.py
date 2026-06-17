@@ -27,11 +27,10 @@ import json
 import math
 from pathlib import Path
 
-import torch
-from transformers import Qwen2_5_VLForConditionalGeneration, AutoProcessor
+import requests
 
-
-DEFAULT_MODEL = "Qwen/Qwen2.5-VL-7B-Instruct"
+OLLAMA_URL   = "http://localhost:11434"   # default Ollama address
+OLLAMA_MODEL = "qwen2.5vl:7b"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -257,79 +256,164 @@ Do not ask "What recipe are you making?" or "Which recipe is this?".
     return prompt.strip()
 
 
+def build_question_prompt_polar(recipe_context: str) -> str:
+    """
+    Polar (yes/no) variant of build_question_prompt. Each question asserts a
+    SINGLE proposition the cook can confirm or deny. The 'proposition' field
+    holds the scene-style statement being asserted — on a "yes" it is
+    incorporated as an observation, on a "no" it is negated via
+    incorporate_negative_answer. Categories mirror the wh prompt so the two
+    conditions are matched on what they probe.
+    """
+    prompt = f"""
+You generate yes/no (polar) clarification questions for a cooking observer
+that is uncertain which recipe the cook is making. The candidate recipes and
+their remaining (unseen) scene sentences are below.
+
+TASK
+Generate exactly 3 polar (yes/no) questions whose answers would reduce
+uncertainty over the current recipe belief. Each question must be answerable
+with a plain "yes" or "no" and must assert ONE concrete proposition.
+
+═══ THE 3 QUESTIONS MUST COVER DIFFERENT ASPECTS ═══
+
+Pick ONE question from each of these three categories:
+
+  1. INGREDIENT — whether the cook is adding or using a specific item.
+        e.g. "Are you adding pecorino next?"
+
+  2. METHOD or TECHNIQUE — whether the cook prepares something a specific way.
+        e.g. "Are you whisking the eggs rather than scrambling them?"
+
+  3. SEQUENCE or ORDER — whether something happens at a specific point.
+        e.g. "Will you drain the pasta before adding the egg mixture?"
+
+A good polar question SPLITS the active candidates: ideally about half of the
+top recipes' near-future would answer "yes" and half "no". A question that
+every candidate answers the same way gains nothing — avoid those.
+
+For each question return:
+  - "question":      the yes/no question (answerable with plain yes/no)
+  - "question_form": "polar"
+  - "category":      one of "ingredient", "method", or "sequence" — cover a
+                     different category across the 3 questions unless the
+                     session genuinely calls for the same one
+  - "proposition":   the scene-style statement the question asserts, drawn
+                     from the REMAINING SCENES of one active candidate (e.g.
+                     "A cook adds pecorino to the bowl."). This is the
+                     statement a "yes" confirms and a "no" denies.
+  - "distinguishes": names of recipes this question helps separate (from the
+                     ACTIVE CANDIDATES below)
+  - "expected_information_gain_reason": one sentence
+
+Do not ask "Are you making carbonara?" or name a recipe directly.
+
+═══ SESSION CONTEXT ═══
+{recipe_context}
+
+═══ EXAMPLE STRUCTURE (placeholder values — do NOT copy verbatim) ═══
+{{
+  "questions": [
+    {{
+      "rank": 1,
+      "question": "<INGREDIENT yes/no question>",
+      "question_form": "polar",
+      "category": "ingredient",
+      "proposition": "<scene sentence the question asserts, from a candidate>",
+      "distinguishes": ["<candidate A>", "<candidate B>"],
+      "expected_information_gain_reason": "<one-sentence reason>"
+    }},
+    {{
+      "rank": 2,
+      "question": "<METHOD yes/no question>",
+      "question_form": "polar",
+      "category": "method",
+      "proposition": "<scene sentence the question asserts, from a candidate>",
+      "distinguishes": ["<candidate A>", "<candidate B>"],
+      "expected_information_gain_reason": "<one-sentence reason>"
+    }},
+    {{
+      "rank": 3,
+      "question": "<SEQUENCE yes/no question>",
+      "question_form": "polar",
+      "category": "sequence",
+      "proposition": "<scene sentence the question asserts, from a candidate>",
+      "distinguishes": ["<candidate A>", "<candidate B>"],
+      "expected_information_gain_reason": "<one-sentence reason>"
+    }}
+  ]
+}}
+
+★ Rules ★
+  - Each question must be answerable yes/no and assert exactly ONE proposition.
+  - Each of the 3 questions must use a DIFFERENT category value
+    (one "ingredient", one "method", one "sequence").
+  - The proposition must be a scene sentence from the REMAINING SCENES list —
+    do not invent ingredients or dishes that aren't in the candidates.
+  - Prefer questions about the NEXT step, not steps far in the future.
+  - Return ONLY the JSON object, no commentary.
+"""
+
+    return prompt.strip()
 # ═══════════════════════════════════════════════════════════════════════════
-# Qwen runner
+# Ollama runner
 # ═══════════════════════════════════════════════════════════════════════════
 
 def generate_text_with_model(
     prompt: str,
-    model,
-    processor,
-    device: str,
+    model,            # model_name string returned by load_qwen_vlm
+    processor,        # unused (None) — kept for signature compatibility
+    device: str,      # "ollama" — kept for signature compatibility
     max_new_tokens: int = 768,
 ) -> str:
     """
-    Text-only generation against an already-loaded Qwen2.5-VL model.
-    Used by the orchestrator when it has loaded the VLM once (via
-    observation_pipeline.video_observer.load_qwen_vlm) and wants to reuse
-    that load for question generation.
+    Text-only generation via Ollama. Replaces the transformers
+    generate_text_with_model — same signature, Ollama backend.
+
+    `model` here is the model name string (e.g. "qwen2.5vl:7b") returned
+    by load_qwen_vlm(). `processor` and `device` are unused but kept so
+    the orchestrators need no changes.
     """
-    messages = [
-        {
-            "role": "user",
-            "content": [
-                {"type": "text", "text": prompt},
-            ],
-        }
-    ]
-    text = processor.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True,
-    )
-    inputs = processor(
-        text=[text], return_tensors="pt", padding=True,
-    ).to(device)
+    payload = {
+        "model":   model,
+        "messages": [
+            {"role": "user", "content": prompt}
+        ],
+        "stream":  False,
+        "options": {"num_predict": max_new_tokens},
+    }
 
     print("Generating...", flush=True)
 
-    with torch.inference_mode():
-        generated_ids = model.generate(**inputs, max_new_tokens=max_new_tokens)
+    try:
+        r = requests.post(
+            f"{OLLAMA_URL}/api/chat",
+            json=payload,
+            timeout=180,    # question generation prompts are long
+        )
+        r.raise_for_status()
+    except requests.exceptions.Timeout:
+        print("  [VLM] Ollama request timed out.")
+        return ""
+    except requests.exceptions.RequestException as e:
+        print(f"  [VLM] Ollama request failed: {e}")
+        return ""
 
-    trimmed = generated_ids[:, inputs.input_ids.shape[1]:]
-    response = processor.batch_decode(
-        trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False,
-    )[0]
-    return response
+    return r.json().get("message", {}).get("content", "")
 
 
 def run_qwen_prompt(
     prompt: str,
-    model_name: str = DEFAULT_MODEL,
+    model_name: str = OLLAMA_MODEL,
     max_new_tokens: int = 768,
 ) -> str:
     """
-    Backwards-compatible wrapper: loads Qwen2.5-VL fresh and runs a text
-    prompt. Prefer load_qwen_vlm() + generate_text_with_model() for any
-    workflow that runs more than one VLM call per session.
+    Backwards-compatible wrapper: runs a text prompt via Ollama.
+    Prefer load_qwen_vlm() + generate_text_with_model() for session use.
     """
-    if torch.backends.mps.is_available():
-        device = "mps"
-    elif torch.cuda.is_available():
-        device = "cuda"
-    else:
-        device = "cpu"
-
-    print(f"Loading {model_name} on {device}...", flush=True)
-    model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-        model_name,
-        torch_dtype=torch.float16,
-    ).to(device)
-    processor = AutoProcessor.from_pretrained(model_name)
-    print("Model ready.", flush=True)
-
-    response = generate_text_with_model(
-        prompt, model, processor, device, max_new_tokens=max_new_tokens,
+    return generate_text_with_model(
+        prompt, model_name, None, "ollama", max_new_tokens=max_new_tokens,
     )
-    return response
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -337,7 +421,7 @@ def run_qwen_prompt(
 # ═══════════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
-    # Print the context + prompt without calling Qwen. Useful for fast
+    # Print the context + prompt without calling Ollama. Useful for fast
     # iteration on the prompt wording.
     import os, sys
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
