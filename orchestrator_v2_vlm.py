@@ -53,7 +53,7 @@ from dialogue.answer_normalizer import (
     AnswerType,
     normalize_answer,
 )
-
+from utils.session_logger import SessionLogger
 
 # ─────────────────────────────────────────────────────────────────────────
 # Observation trajectory — carbonara session (REAL VIDEO).
@@ -326,6 +326,7 @@ def main(answer_mode: str = "stub"):
     #    - question generation (text prompt → JSON)
     print()
     model, processor, device = load_qwen_vlm()
+    logger = SessionLogger(condition="wh", ground_truth=GROUND_TRUTH)
 
     # 3. Belief-history tracker. One row per event (initial / observation /
     # answer). Saved to outputs/belief_history.csv at the end for plotting.
@@ -383,6 +384,11 @@ def main(answer_mode: str = "stub"):
 
         snapshot(step_num=i, event_type="observation",
                  text=sentence, entropy_before=entropy_before_obs)
+        logger.log_observation(
+            window=i, clip=clip_path.name, sentence=sentence,
+            entropy_before=entropy_before_obs, entropy_after=bu.entropy(),
+        )
+
         top, p = bu.top_recipe()
         print(f"  entropy : {bu.entropy():.4f} bits  (IG_obs {real_ig_obs:+.4f})")
         print(f"  top     : {top} ({p:.3f})")
@@ -402,6 +408,11 @@ def main(answer_mode: str = "stub"):
                 "redundancy": round(redundancy, 4),
                 "unique_value": round(unique_value, 4),
             })
+            logger.log_redundancy(
+                window=pending_question["window"],
+                redundancy=redundancy,
+                unique_value=unique_value,
+            )
             print(f"  [redundancy] Q@W{pending_question['window']}: "
                   f"IG_Q={pending_question['ig_q']:+.3f}, "
                   f"next-obs redundancy={redundancy:+.3f}, "
@@ -466,6 +477,7 @@ def main(answer_mode: str = "stub"):
 
         if not ask:
             print("  [gate] Best EIG below threshold — skipping.")
+            logger.log_skip()
             continue
 
         # 5. Fire the chosen question. The stub path simulates a
@@ -533,6 +545,13 @@ def main(answer_mode: str = "stub"):
                  text=answer_sentence, entropy_before=h_before)
         h_after = bu.entropy()
         realised = h_before - h_after
+        logger.log_question(
+            window=i, question=best_q["question"],
+            category=best_q.get("category", ""),
+            answer=answer, answer_type="wh",
+            predicted_eig=best_q["measured_eig"],
+            realised_ig_q=realised,
+        )
 
         print(f"     realised IG_Q : {realised:+.4f} bits "
               f"(Δ vs predicted: {realised - best_q['measured_eig']:+.4f})")
@@ -637,6 +656,11 @@ def main(answer_mode: str = "stub"):
     print(f"Appended session summary → {summary_csv}")
 
     print("\nPlot with: python scripts/plot_belief.py")
+    logger.save(
+        predicted=top, accuracy=accuracy, final_prob=p,
+        final_entropy=bu.entropy(), questions_asked=questions_asked,
+        belief_history=history_rows, n_recipes=bu.N,
+    )
 
 
 def parse_args() -> argparse.Namespace:

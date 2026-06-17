@@ -26,6 +26,7 @@ sys.path.insert(0, str(ROOT))
 
 from probability.belief_updater_v3 import BeliefUpdaterV3
 from observation_pipeline.video_observer import load_qwen_vlm, describe_clip
+from utils.session_logger import SessionLogger
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -66,6 +67,7 @@ def main():
 
     print()
     model, processor, device = load_qwen_vlm()
+    logger = SessionLogger(condition="obs_only", ground_truth=GROUND_TRUTH)
 
     history_rows: list[dict] = []
 
@@ -107,6 +109,11 @@ def main():
 
         snapshot(step_num=i, event_type="observation",
                  text=sentence, entropy_before=entropy_before)
+        
+        logger.log_observation(
+            window=i, clip=clip_path.name, sentence=sentence,
+            entropy_before=entropy_before, entropy_after=bu.entropy(),
+        )
 
         top, p = bu.top_recipe()
         print(f"  entropy : {bu.entropy():.4f} bits  (IG_obs {ig_obs:+.4f})")
@@ -167,6 +174,11 @@ def main():
     print(f"Appended session summary → {summary_csv}")
 
     print("\nPlot with: python scripts/plot_belief.py")
+    logger.save(
+        predicted=top, accuracy=accuracy, final_prob=p,
+        final_entropy=bu.entropy(), questions_asked=0,
+        belief_history=history_rows, n_recipes=bu.N,
+    )
 
 
 if __name__ == "__main__":

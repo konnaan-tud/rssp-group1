@@ -20,7 +20,7 @@ Structurally identical to orchestrator_wh.py except:
     uses simulate_polar_answer (yes/no branches) instead of simulate_answer.
 
 Run:
-    PYTORCH_ENABLE_MPS_FALLBACK=1 python orchestrator_polar.py
+    python orchestrator_polar.py
 """
 
 from __future__ import annotations
@@ -38,14 +38,15 @@ from probability.belief_updater_v3 import BeliefUpdaterV3
 from observation_pipeline.video_observer import load_qwen_vlm, describe_clip
 from questioning.questioning_pipeline import (
     build_recipe_context,
-    build_question_prompt_polar,      # ← polar prompt (proposition schema)
+    build_question_prompt_polar,
     generate_text_with_model,
 )
-from questioning.questioning_planner import should_ask            # polar=True below
+from questioning.questioning_planner import should_ask
+from utils.session_logger import SessionLogger
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Observation trajectory — carbonara session (REAL VIDEO).
+# Observation trajectory
 # ─────────────────────────────────────────────────────────────────────────
 
 CLIPS_DIR = Path("data/clips")
@@ -62,33 +63,13 @@ WINDOWS = [
     CLIPS_DIR / "09_stirring_carbonara.mp4",
 ]
 
+GROUND_TRUTH          = "carbonara"
+HUMAN_STUB_MIN_COSINE = 0.40
+
 
 # ─────────────────────────────────────────────────────────────────────────
 # Human-answer stub (polar)
-#
-# The cook is making carbonara. For each polar question the VLM asserts a
-# proposition (e.g. "A cook adds cream to the pan.").
-#
-# Stub logic:
-#   - Embed the proposition and check its cosine against carbonara's
-#     adaptive near-future scenes (same window the planner uses).
-#   - cosine >= HUMAN_STUB_MIN_COSINE  →  "yes" (the proposition fits
-#     carbonara's next steps, so the cook confirms it).
-#   - cosine <  HUMAN_STUB_MIN_COSINE  →  "no"  (the proposition does not
-#     fit carbonara, so the cook denies it — e.g. cream is not in carbonara).
-#
-# Note: unlike the wh stub there is no "doesn't apply yet" branch. In polar,
-# even a low-cosine proposition is answerable ("no"), so no turn is wasted.
-# The EIG gate already filters propositions that are not applicable to any
-# active recipe's near-future — those never reach the stub.
-#
-# In real experiments this whole function is replaced with input() (typed
-# human) or audio capture + yes/no parsing.
 # ─────────────────────────────────────────────────────────────────────────
-
-GROUND_TRUTH = "carbonara"
-HUMAN_STUB_MIN_COSINE = 0.40
-
 
 def pick_human_answer_polar(
     question: dict,
@@ -97,16 +78,14 @@ def pick_human_answer_polar(
     """
     Return (answer, proposition) where answer is "yes" or "no".
 
-    The proposition comes directly from the VLM-generated question dict.
-    It is the scene-style statement the question asserts — the thing that
-    gets incorporated into belief regardless of which path fires.
+    Checks cosine between the proposition and carbonara's adaptive
+    near-future scenes. Above HUMAN_STUB_MIN_COSINE → "yes", else "no".
+    In a real experiment this is replaced with input() or audio capture.
     """
-    import numpy as np
     from questioning.questioning_planner import NEAR_FUTURE_WINDOW, _cosine, _adaptive_window
 
     proposition = (question.get("proposition") or "").strip()
     if not proposition:
-        # Malformed question from the VLM — treat as no useful answer.
         return "no", ""
 
     near = bu.unseen_recipe_scenes(GROUND_TRUTH)
@@ -114,12 +93,11 @@ def pick_human_answer_polar(
     near = near[:window]
 
     if not near:
-        # Cook has no remaining scenes → deny everything.
         return "no", proposition
 
-    p_vec = bu._embedder.embed(proposition)
+    p_vec      = bu._embedder.embed(proposition)
     scene_vecs = bu._embedder.embed_batch(near)
-    best_cos = max(_cosine(p_vec, v) for v in scene_vecs)
+    best_cos   = max(_cosine(p_vec, v) for v in scene_vecs)
 
     answer = "yes" if best_cos >= HUMAN_STUB_MIN_COSINE else "no"
     return answer, proposition
@@ -129,21 +107,16 @@ def pick_human_answer_polar(
 # Hyperparameters
 # ─────────────────────────────────────────────────────────────────────────
 
-ENTROPY_THRESHOLD = 1.5
-TOP_PROB_CEILING  = 0.75
-EIG_THRESHOLD     = 0.10
-MAX_QUESTIONS     = 9_999
-
-PROMPT_TOP_K             = 6
-PROMPT_ACTIVE_THRESHOLD  = 0.02
+ENTROPY_THRESHOLD       = 1.5
+TOP_PROB_CEILING        = 0.75
+EIG_THRESHOLD           = 0.10
+MAX_QUESTIONS           = 9_999
+PROMPT_TOP_K            = 6
+PROMPT_ACTIVE_THRESHOLD = 0.02
 
 
 # ─────────────────────────────────────────────────────────────────────────
 # VLM output parsing (polar)
-#
-# Identical to the wh parser except it also extracts the 'proposition' field
-# that polar questions carry. Without the proposition there is nothing to
-# incorporate on a "no", so entries missing it are dropped.
 # ─────────────────────────────────────────────────────────────────────────
 
 _FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
@@ -151,10 +124,10 @@ _FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.MULTILINE)
 
 def parse_vlm_questions(raw_response: str) -> list[dict]:
     """
-    Parse Qwen's polar JSON output. Drops entries that are missing a
-    non-empty 'proposition' field (the rest of the pipeline depends on it).
+    Parse Qwen's polar JSON output. Drops questions missing 'proposition'
+    since both yes and no paths depend on it.
     """
-    text = _FENCE_RE.sub("", raw_response).strip()
+    text  = _FENCE_RE.sub("", raw_response).strip()
     start = text.find("{")
     end   = text.rfind("}")
     if start == -1 or end == -1 or end < start:
@@ -188,7 +161,6 @@ def parse_vlm_questions(raw_response: str) -> list[dict]:
             category = category.strip().lower()
         if category not in ("ingredient", "method", "sequence"):
             category = "unspecified"
-        targets      = q.get("targets", [])
         distinguishes = q.get("distinguishes", [])
         clean.append({
             "rank":          q.get("rank", i + 1),
@@ -196,7 +168,6 @@ def parse_vlm_questions(raw_response: str) -> list[dict]:
             "question_form": "polar",
             "category":      category,
             "proposition":   proposition,
-            "targets":       targets      if isinstance(targets, list)      else [],
             "distinguishes": distinguishes if isinstance(distinguishes, list) else [],
         })
     return clean
@@ -212,7 +183,7 @@ def generate_vlm_questions(
     processor,
     device: str,
 ) -> list[dict]:
-    """Build the polar prompt, call Qwen, parse the JSON response."""
+    """Build the polar prompt, call Qwen via Ollama, parse JSON response."""
     context = build_recipe_context(
         belief_updater,
         active_threshold=PROMPT_ACTIVE_THRESHOLD,
@@ -224,7 +195,7 @@ def generate_vlm_questions(
     )
     print(f"  [VLM] Active recipes in context: {min(n_active, PROMPT_TOP_K)}")
 
-    prompt = build_question_prompt_polar(recipe_context=context)   # ← polar
+    prompt = build_question_prompt_polar(recipe_context=context)
     print("  [VLM] Generating candidate polar questions...")
     raw_response = generate_text_with_model(prompt, model, processor, device)
 
@@ -249,21 +220,19 @@ def main():
         print("\nRun: python scripts/prepare_clips.py")
         return
 
-    bu = BeliefUpdaterV3()
-
-    # Shadow belief updater: observations only, never sees clarification
-    # answers. Used to measure per-question redundancy — same as the wh
-    # orchestrator.
-    bu_obs_only = bu.copy()
+    bu          = BeliefUpdaterV3()
+    bu_obs_only = bu.copy()   # shadow updater — observations only, no answers
 
     print()
     model, processor, device = load_qwen_vlm()
+
+    logger = SessionLogger(condition="polar", ground_truth=GROUND_TRUTH)
 
     history_rows: list[dict] = []
 
     def snapshot(step_num: int, event_type: str, text: str,
                  entropy_before: float) -> None:
-        ent = bu.entropy()
+        ent       = bu.entropy()
         top, top_p = bu.top_recipe()
         row = {
             "step":       step_num,
@@ -281,10 +250,10 @@ def main():
     snapshot(step_num=0, event_type="initial", text="",
              entropy_before=bu.entropy())
 
-    question_log: list[dict]    = []
+    question_log: list[dict]     = []
     pending_question: dict | None = None
+    questions_asked               = 0
 
-    questions_asked = 0
     print(f"\nMax entropy: {bu.max_entropy():.3f} bits")
 
     for i, clip_path in enumerate(WINDOWS, start=1):
@@ -297,8 +266,8 @@ def main():
             print("  [warn] VLM returned empty observation; skipping update.")
             continue
 
-        # 2. Update both the real and shadow updaters.
-        entropy_before_obs       = bu.entropy()
+        # 2. Update both updaters.
+        entropy_before_obs        = bu.entropy()
         shadow_entropy_before_obs = bu_obs_only.entropy()
 
         bu.update(sentence)
@@ -309,11 +278,18 @@ def main():
 
         snapshot(step_num=i, event_type="observation",
                  text=sentence, entropy_before=entropy_before_obs)
+
+        # Log observation.
+        logger.log_observation(
+            window=i, clip=clip_path.name, sentence=sentence,
+            entropy_before=entropy_before_obs, entropy_after=bu.entropy(),
+        )
+
         top, p = bu.top_recipe()
         print(f"  entropy : {bu.entropy():.4f} bits  (IG_obs {real_ig_obs:+.4f})")
         print(f"  top     : {top} ({p:.3f})")
 
-        # 2b. Close out the previous window's question redundancy.
+        # 2b. Close out previous question redundancy.
         if pending_question is not None:
             redundancy   = shadow_ig_obs - real_ig_obs
             unique_value = pending_question["ig_q"] - redundancy
@@ -328,6 +304,11 @@ def main():
                   f"IG_Q={pending_question['ig_q']:+.3f}, "
                   f"next-obs redundancy={redundancy:+.3f}, "
                   f"unique value={unique_value:+.3f}")
+            logger.log_redundancy(
+                window=pending_question["window"],
+                redundancy=redundancy,
+                unique_value=unique_value,
+            )
             question_log.append(pending_question)
             pending_question = None
 
@@ -349,14 +330,14 @@ def main():
         ask, best_q, ranked = should_ask(
             belief_updater=bu,
             questions=questions,
-            entropy_threshold=0.0,       # already gated above
+            entropy_threshold=0.0,
             eig_threshold=EIG_THRESHOLD,
             questions_asked=questions_asked,
             max_questions=MAX_QUESTIONS,
-            polar=True,                  # ← key difference from wh
+            polar=True,
         )
 
-        # Per-branch EIG breakdown (yes/no instead of scene text).
+        # Per-branch EIG breakdown.
         print("\n  candidate questions (with EIG breakdown):")
         for q in ranked:
             cat  = q.get("category", "unspecified")
@@ -376,6 +357,7 @@ def main():
 
         if not ask:
             print("  [gate] Best EIG below threshold — skipping.")
+            logger.log_skip()
             continue
 
         # 6. Ask and route the answer.
@@ -392,19 +374,16 @@ def main():
         h_before = bu.entropy()
 
         if answer == "yes":
-            # Affirmed proposition → treat as an observation.
             bu.incorporate_answer(proposition)
             snapshot(step_num=i, event_type="answer_yes",
                      text=proposition, entropy_before=h_before)
         else:
-            # Denied proposition → persistent negative penalty.
             bu.incorporate_negative_answer(proposition)
             snapshot(step_num=i, event_type="answer_no",
                      text=f"NO: {proposition}", entropy_before=h_before)
 
-        # NOTE: shadow updater never sees the answer — that's the point.
-        h_after   = bu.entropy()
-        realised  = h_before - h_after
+        h_after  = bu.entropy()
+        realised = h_before - h_after
 
         print(f"     realised IG_Q : {realised:+.4f} bits "
               f"(Δ vs predicted: {realised - best_q['measured_eig']:+.4f})")
@@ -415,11 +394,23 @@ def main():
             bar = "█" * int(round(prob * 30))
             print(f"        {prob:.3f}  {bar:<30}  {name}")
 
+        # Log question.
+        logger.log_question(
+            window=i,
+            question=best_q["question"],
+            category=best_q.get("category", ""),
+            answer=proposition,
+            answer_type=answer,       # "yes" or "no"
+            predicted_eig=best_q["measured_eig"],
+            realised_ig_q=realised,
+            proposition=proposition,
+        )
+
         pending_question = {
             "window":             i,
             "question":           best_q["question"],
             "question_form":      "polar",
-            "answer_type":        answer,          # "yes" or "no"
+            "answer_type":        answer,
             "proposition":        proposition,
             "category":           best_q.get("category", "unspecified"),
             "predicted_eig":      round(best_q["measured_eig"], 4),
@@ -428,15 +419,16 @@ def main():
             "real_ig_next_obs":   None,
             "shadow_ig_next_obs": None,
             "redundancy":         None,
-            "unique_value":       round(realised, 4),   # overwritten on close
+            "unique_value":       round(realised, 4),
         }
 
         questions_asked += 1
 
     # ── Final report ──────────────────────────────────────────────────────
-    top, p = bu.top_recipe()
+    top, p     = bu.top_recipe()
     is_correct = (top == GROUND_TRUTH)
     accuracy   = 1 if is_correct else 0
+
     print("\n" + "═" * 60)
     print(f"Ground truth     : {GROUND_TRUTH}")
     print(f"Final prediction : {top} (p={p:.4f})")
@@ -449,6 +441,13 @@ def main():
         pending_question["redundancy"]   = None
         pending_question["unique_value"] = pending_question["ig_q"]
         question_log.append(pending_question)
+
+    # ── Session logger save ───────────────────────────────────────────────
+    logger.save(
+        predicted=top, accuracy=accuracy, final_prob=p,
+        final_entropy=bu.entropy(), questions_asked=questions_asked,
+        belief_history=history_rows, n_recipes=bu.N,
+    )
 
     # ── Write CSVs ────────────────────────────────────────────────────────
     outputs_dir = Path("outputs")
@@ -474,17 +473,17 @@ def main():
     import datetime as _dt
     summary_csv = outputs_dir / "session_summary.csv"
     summary_row = {
-        "timestamp":        _dt.datetime.now().isoformat(timespec="seconds"),
-        "condition":        "polar",
-        "ground_truth":     GROUND_TRUTH,
-        "predicted":        top,
-        "accuracy":         accuracy,
-        "predicted_prob":   round(p, 4),
-        "final_entropy":    round(bu.entropy(), 4),
-        "questions_asked":  questions_asked,
-        "n_recipes":        bu.N,
-        "n_windows":        len(WINDOWS),
-        "total_ig_q":       round(
+        "timestamp":          _dt.datetime.now().isoformat(timespec="seconds"),
+        "condition":          "polar",
+        "ground_truth":       GROUND_TRUTH,
+        "predicted":          top,
+        "accuracy":           accuracy,
+        "predicted_prob":     round(p, 4),
+        "final_entropy":      round(bu.entropy(), 4),
+        "questions_asked":    questions_asked,
+        "n_recipes":          bu.N,
+        "n_windows":          len(WINDOWS),
+        "total_ig_q":         round(
             sum(q.get("ig_q", 0) or 0 for q in bu.ig_q_log()), 4
         ),
         "total_unique_value": round(
@@ -492,7 +491,7 @@ def main():
         ),
     }
     summary_fields = list(summary_row.keys())
-    write_header = not summary_csv.exists()
+    write_header   = not summary_csv.exists()
     with open(summary_csv, "a", newline="", encoding="utf-8") as f:
         writer = _csv.DictWriter(f, fieldnames=summary_fields)
         if write_header:
