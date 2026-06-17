@@ -257,8 +257,105 @@ Do not ask "What recipe are you making?" or "Which recipe is this?".
     return prompt.strip()
 
 
-# ═══════════════════════════════════════════════════════════════════════════
-# Qwen runner
+def build_question_prompt_polar(recipe_context: str) -> str:
+    """
+    Polar (yes/no) variant of build_question_prompt. Each question asserts a
+    SINGLE proposition the cook can confirm or deny. The 'proposition' field
+    holds the scene-style statement being asserted — on a "yes" it is
+    incorporated as an observation, on a "no" it is negated via
+    incorporate_negative_answer. Categories mirror the wh prompt so the two
+    conditions are matched on what they probe.
+    """
+    prompt = f"""
+You generate yes/no (polar) clarification questions for a cooking observer
+that is uncertain which recipe the cook is making. The candidate recipes and
+their remaining (unseen) scene sentences are below.
+
+TASK
+Generate exactly 3 polar (yes/no) questions whose answers would reduce
+uncertainty over the current recipe belief. Each question must be answerable
+with a plain "yes" or "no" and must assert ONE concrete proposition.
+
+═══ THE 3 QUESTIONS MUST COVER DIFFERENT ASPECTS ═══
+
+Pick ONE question from each of these three categories:
+
+  1. INGREDIENT — whether the cook is adding or using a specific item.
+        e.g. "Are you adding pecorino next?"
+
+  2. METHOD or TECHNIQUE — whether the cook prepares something a specific way.
+        e.g. "Are you whisking the eggs rather than scrambling them?"
+
+  3. SEQUENCE or ORDER — whether something happens at a specific point.
+        e.g. "Will you drain the pasta before adding the egg mixture?"
+
+A good polar question SPLITS the active candidates: ideally about half of the
+top recipes' near-future would answer "yes" and half "no". A question that
+every candidate answers the same way gains nothing — avoid those.
+
+For each question return:
+  - "question":      the yes/no question (answerable with plain yes/no)
+  - "question_form": "polar"
+  - "category":      one of "ingredient", "method", or "sequence" — cover a
+                     different category across the 3 questions unless the
+                     session genuinely calls for the same one
+  - "proposition":   the scene-style statement the question asserts, drawn
+                     from the REMAINING SCENES of one active candidate (e.g.
+                     "A cook adds pecorino to the bowl."). This is the
+                     statement a "yes" confirms and a "no" denies.
+  - "distinguishes": names of recipes this question helps separate (from the
+                     ACTIVE CANDIDATES below)
+  - "expected_information_gain_reason": one sentence
+
+Do not ask "Are you making carbonara?" or name a recipe directly.
+
+═══ SESSION CONTEXT ═══
+{recipe_context}
+
+═══ EXAMPLE STRUCTURE (placeholder values — do NOT copy verbatim) ═══
+{{
+  "questions": [
+    {{
+      "rank": 1,
+      "question": "<INGREDIENT yes/no question>",
+      "question_form": "polar",
+      "category": "ingredient",
+      "proposition": "<scene sentence the question asserts, from a candidate>",
+      "distinguishes": ["<candidate A>", "<candidate B>"],
+      "expected_information_gain_reason": "<one-sentence reason>"
+    }},
+    {{
+      "rank": 2,
+      "question": "<METHOD yes/no question>",
+      "question_form": "polar",
+      "category": "method",
+      "proposition": "<scene sentence the question asserts, from a candidate>",
+      "distinguishes": ["<candidate A>", "<candidate B>"],
+      "expected_information_gain_reason": "<one-sentence reason>"
+    }},
+    {{
+      "rank": 3,
+      "question": "<SEQUENCE yes/no question>",
+      "question_form": "polar",
+      "category": "sequence",
+      "proposition": "<scene sentence the question asserts, from a candidate>",
+      "distinguishes": ["<candidate A>", "<candidate B>"],
+      "expected_information_gain_reason": "<one-sentence reason>"
+    }}
+  ]
+}}
+
+★ Rules ★
+  - Each question must be answerable yes/no and assert exactly ONE proposition.
+  - Each of the 3 questions must use a DIFFERENT category value
+    (one "ingredient", one "method", one "sequence").
+  - The proposition must be a scene sentence from the REMAINING SCENES list —
+    do not invent ingredients or dishes that aren't in the candidates.
+  - Prefer questions about the NEXT step, not steps far in the future.
+  - Return ONLY the JSON object, no commentary.
+"""
+
+    return prompt.strip()
 # ═══════════════════════════════════════════════════════════════════════════
 
 def generate_text_with_model(
