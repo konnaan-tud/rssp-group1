@@ -29,6 +29,7 @@ Run:
 
 from __future__ import annotations
 
+import argparse
 import json
 import re
 import sys
@@ -47,6 +48,11 @@ from questioning.questioning_pipeline import (
     generate_text_with_model,
 )
 from questioning.questioning_planner import should_ask, simulate_answer
+from dialogue.answer_normalizer import (
+    AnswerOutcome,
+    AnswerType,
+    normalize_answer,
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -103,18 +109,22 @@ HUMAN_STUB_NOT_AT_STEP = (
 )
 
 
-def _to_first_person(scene: str) -> str:
-    """
-    DEPRECATED — kept only so older code doesn't break.
-    The orchestrator no longer converts simulator output to first-person
-    because that introduces an "I am X" vs "A cook X" embedding mismatch
-    against the recipe corpus. pick_human_answer now returns the scene
-    in its recipe form directly.
-    """
-    return scene
-
-
 def pick_human_answer(question_text: str, bu: BeliefUpdaterV3) -> str:
+    """
+    Stub "human" for the carbonara session. Returns the raw string the
+    cook would say; downstream normalisation runs through `normalize_answer`
+    so this path looks identical to the typed-text path.
+
+      - Keyword overrides for questions whose natural answer is a
+        negation or summary, not a single recipe scene.
+      - Default: pick the carbonara unseen scene most similar to the
+        question (within the near-future window). If no scene is
+        sufficiently similar, return the "doesn't apply yet" string —
+        the normaliser will classify it as DOESNT_APPLY.
+
+    In real experiments this whole function is replaced with the
+    typed-text path (`--answer-mode text`) or with audio capture.
+    """
     q = question_text.lower()
 
     # Overrides: questions whose true answer is a negation/summary, not a
@@ -126,10 +136,7 @@ def pick_human_answer(question_text: str, bu: BeliefUpdaterV3) -> str:
         return "Carbonara does not use fresh herbs, only black pepper."
 
     # Default: simulate against carbonara and check whether the picked scene
-    # is actually relevant to the question. If not, the cook says "doesn't
-    # apply yet" — which is exactly what a real human would say if asked
-    # about a step they haven't reached.
-    import numpy as np
+    # is actually relevant to the question.
     from questioning.questioning_planner import NEAR_FUTURE_WINDOW, _cosine
 
     near = bu.unseen_recipe_scenes(GROUND_TRUTH)[:NEAR_FUTURE_WINDOW]
@@ -145,10 +152,37 @@ def pick_human_answer(question_text: str, bu: BeliefUpdaterV3) -> str:
     if best_cos < HUMAN_STUB_MIN_COSINE:
         return HUMAN_STUB_NOT_AT_STEP
 
-    # Return the recipe scene as-is, in third-person ("A cook X.") form.
-    # No conversion to first-person — the embedding form must match the
-    # recipe corpus to avoid a similarity gap.
+    # Return the recipe scene as-is. The normaliser will pass it through
+    # unchanged (already in recipe form).
     return near[best_idx]
+
+
+def prompt_text_answer(question_text: str) -> str:
+    """
+    Prompt a human for a typed answer in the terminal.
+
+    Returns the raw text (possibly empty / "skip" / "no" / etc.); the
+    normaliser figures out what to do with it. We deliberately do NOT
+    short-circuit on "skip" here — the normaliser sees it as DONT_KNOW
+    and the orchestrator's standard skip path handles it uniformly.
+    """
+    print(f"\n  >> Asking : {question_text}")
+    print("     (type your answer, or 'skip' / 'don't know' / 'doesn't apply')")
+    try:
+        return input("     your answer : ").strip()
+    except EOFError:
+        return ""
+
+
+def get_raw_human_answer(
+    question_text: str,
+    bu: BeliefUpdaterV3,
+    answer_mode: str,
+) -> str:
+    """Dispatch to the configured human-answer source."""
+    if answer_mode == "text":
+        return prompt_text_answer(question_text)
+    return pick_human_answer(question_text, bu)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -266,7 +300,7 @@ def generate_vlm_questions(
 # Main loop
 # ─────────────────────────────────────────────────────────────────────────
 
-def main():
+def main(answer_mode: str = "stub"):
     # 1. Sanity check: every clip must exist before we waste 30s on model load.
     missing = [p for p in WINDOWS if not p.exists()]
     if missing:
@@ -434,31 +468,69 @@ def main():
             print("  [gate] Best EIG below threshold — skipping.")
             continue
 
-        # 5. Fire the chosen question. The human stub answers using the
-        # planner's simulator pointed at the ground-truth recipe — so it
-        # gives a scene-style answer consistent with the recipe being
-        # cooked.
-        answer = pick_human_answer(best_q["question"], bu)
+        # 5. Fire the chosen question. The stub path simulates a
+        # carbonara cook; the text path prompts the terminal. Both
+        # produce a raw string that the normaliser classifies.
+        raw_answer = get_raw_human_answer(
+            best_q["question"], bu, answer_mode=answer_mode,
+        )
+        outcome: AnswerOutcome = normalize_answer(raw_answer, belief_updater=bu)
 
-        print(f"\n  >> Asking : {best_q['question']}")
-        print(f"     human   : {answer}")
+        if answer_mode != "text":
+            print(f"\n  >> Asking : {best_q['question']}")
+        print(f"     raw answer    : {raw_answer!r}")
+        print(f"     classified    : {outcome.type.value}")
+        if outcome.recipe_sentence and outcome.type == AnswerType.AFFIRMATIVE:
+            print(f"     recipe form   : {outcome.recipe_sentence}")
         print(f"     predicted EIG : {best_q['measured_eig']:+.4f} bits")
 
-        # IMPORTANT: when the human says the question doesn't apply yet,
-        # we explicitly do NOT update the belief. Embedding that generic
-        # sentence produces spurious IG (~0.5 bits) from idiosyncratic
-        # cosine noise, not real information. Skip it instead.
-        if answer == HUMAN_STUB_NOT_AT_STEP:
-            print(f"     [skip] Human said the question doesn't apply — "
-                  f"NO belief update, no IG_Q recorded.")
+        # Route on the outcome's type. Three branches:
+        #   - DOESNT_APPLY / DONT_KNOW / OFF_TOPIC → skip silently
+        #   - NEGATIVE                              → log + skip (V3 can't
+        #                                              represent negation
+        #                                              reliably; documented
+        #                                              limitation)
+        #   - AFFIRMATIVE                           → incorporate + log IG_Q
+        if outcome.skip_update:
+            print(f"     [skip] {outcome.type.value} — NO belief update, "
+                  f"no IG_Q recorded.")
             continue
 
+        if outcome.type == AnswerType.NEGATIVE:
+            negated = outcome.metadata.get("negated_entity")
+            note = f" (negated entity: {negated!r})" if negated else ""
+            print(f"     [skip] NEGATIVE answer{note} — NO belief update. "
+                  f"V3's embedder does not represent negation reliably; "
+                  f"recording as a missed-opportunity question.")
+            # Still log the question so the redundancy CSV has a row
+            # describing why no IG_Q was recorded.
+            question_log.append({
+                "window": i,
+                "question": best_q["question"],
+                "category": best_q.get("category", "unspecified"),
+                "answer": raw_answer,
+                "answer_type": outcome.type.value,
+                "predicted_eig": round(best_q["measured_eig"], 4),
+                "ig_q": 0.0,
+                "next_obs_window": None,
+                "real_ig_next_obs": None,
+                "shadow_ig_next_obs": None,
+                "redundancy": None,
+                "unique_value": 0.0,
+                "negated_entity": negated or "",
+            })
+            continue
+
+        # AFFIRMATIVE path — actually update the belief.
+        assert outcome.recipe_sentence is not None
+        answer_sentence = outcome.recipe_sentence
+
         h_before = bu.entropy()
-        bu.incorporate_answer(answer)
+        bu.incorporate_answer(answer_sentence)
         # NOTE: do NOT apply the answer to bu_obs_only — that's the whole
         # point of the shadow updater. It only ever sees observations.
         snapshot(step_num=i, event_type="answer",
-                 text=answer, entropy_before=h_before)
+                 text=answer_sentence, entropy_before=h_before)
         h_after = bu.entropy()
         realised = h_before - h_after
 
@@ -478,7 +550,8 @@ def main():
             "window": i,
             "question": best_q["question"],
             "category": best_q.get("category", "unspecified"),
-            "answer": answer,
+            "answer": answer_sentence,
+            "answer_type": outcome.type.value,
             "predicted_eig": round(best_q["measured_eig"], 4),
             "ig_q": round(realised, 4),
             "next_obs_window": None,
@@ -486,6 +559,7 @@ def main():
             "shadow_ig_next_obs": None,
             "redundancy": None,
             "unique_value": round(realised, 4),  # placeholder; overwritten on close
+            "negated_entity": "",
         }
 
         questions_asked += 1
@@ -565,5 +639,22 @@ def main():
     print("\nPlot with: python scripts/plot_belief.py")
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run the VLM orchestrator end-to-end."
+    )
+    parser.add_argument(
+        "--answer-mode",
+        choices=["stub", "text"],
+        default="stub",
+        help=(
+            "Human-answer source. 'stub' uses the built-in carbonara "
+            "simulator; 'text' prompts for a typed answer in the terminal."
+        ),
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(answer_mode=args.answer_mode)
