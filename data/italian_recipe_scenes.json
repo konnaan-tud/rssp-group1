@@ -357,5 +357,65 @@
       "A cook adds pine nuts to the mixing bowl.",
       "A cook folds gnocchi into the pesto."
     ]
+  },
+  {
+    "dish": "scrambled carbonara",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook dices pancetta on a cutting board.",
+      "A cook heats a skillet over medium heat.",
+      "A cook cooks pancetta in the skillet.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook cracks eggs directly into the skillet.",
+      "A cook grates pecorino over the eggs in the skillet.",
+      "A cook scrambles the eggs with the pancetta.",
+      "A cook drains pasta over the sink.",
+      "A cook tosses the pasta with the scrambled eggs in the skillet."
+    ]
+  },
+  {
+    "dish": "carbonara bianca",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook separates egg yolks from whites in a bowl.",
+      "A cook whisks egg yolks in a mixing bowl.",
+      "A cook grates pecorino into the mixing bowl.",
+      "A cook dices pancetta on a cutting board.",
+      "A cook cooks pancetta in a skillet.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook drains pasta over the sink.",
+      "A cook transfers pasta into the skillet.",
+      "A cook pours the yolk mixture over the pasta."
+    ]
+  },
+  {
+    "dish": "gricia",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook dices pancetta on a cutting board.",
+      "A cook cooks pancetta in a skillet.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook grates pecorino into a bowl.",
+      "A cook drains pasta over the sink.",
+      "A cook transfers pasta into the skillet.",
+      "A cook tosses the pasta with the rendered pancetta.",
+      "A cook sprinkles pecorino over the pasta.",
+      "A cook stirs the pasta in the skillet."
+    ]
+  },
+  {
+    "dish": "cacio e uova",
+    "scenes": [
+      "A cook pours water into a large pot.",
+      "A cook cracks eggs into a mixing bowl.",
+      "A cook whisks the eggs in the mixing bowl.",
+      "A cook grates pecorino into the mixing bowl.",
+      "A cook drops pasta into salted boiling water.",
+      "A cook drains pasta over the sink.",
+      "A cook transfers pasta into a serving bowl.",
+      "A cook pours the egg mixture over the pasta.",
+      "A cook tosses the pasta with the egg mixture.",
+      "A cook sprinkles black pepper over the pasta."
+    ]
   }
 ]

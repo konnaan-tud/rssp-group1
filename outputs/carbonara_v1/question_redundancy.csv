@@ -1,0 +1,3 @@
+window,question,answer,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value
+1,What ingredient will the cook add next?,I am grating pecorino into the mixing bowl.,0.4552,0.9209,2,1.0184,0.614,-0.4044,1.3253
+3,What will the cook do next?,I am dicing pancetta on a cutting board.,0.878,0.7562,4,0.2278,0.8956,0.6679,0.0883
