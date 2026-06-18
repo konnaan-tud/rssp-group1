@@ -3,16 +3,22 @@ utils/session_logger.py
 -----------------------
 Shared logging module used by all three orchestrators.
 
-Per run, writes two outputs:
+Per run, writes:
 
-1. outputs/sessions/<session_id>.json
+1. outputs/sessions/<session_id>/session.json
    Full detail: every observation sentence, IG_obs, every question asked,
    predicted EIG, realised IG_Q, redundancy, unique value, belief trajectory
    at question time. Self-contained record of one complete session.
 
-2. outputs/runs_log.csv
-   One row per session, all conditions. The comparison table for the paper.
-   Append-only so it accumulates across all runs without overwriting.
+2. outputs/sessions/<session_id>/                       (the session DIRECTORY)
+   All per-session artefacts go here — belief_history.csv,
+   question_redundancy.csv, generated figures, etc. Orchestrators read
+   `logger.session_dir` and write their CSVs there. Nothing is overwritten
+   between runs.
+
+3. outputs/runs_log.csv
+   One row per session, all conditions. The cross-session comparison
+   table for the paper. Append-only so it accumulates across all runs.
 
 Usage (same pattern in all three orchestrators):
     from utils.session_logger import SessionLogger
@@ -126,7 +132,12 @@ class SessionLogger:
         self._windows: dict[int, dict] = {}
         self._question_skips: int = 0
 
+        # Per-session directory. Orchestrators write their CSVs / figures
+        # into this directory via `logger.session_dir`. Nothing overwrites
+        # between runs because every session has a unique timestamped name.
         SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+        self.session_dir: Path = SESSIONS_DIR / self.session_id
+        self.session_dir.mkdir(parents=True, exist_ok=True)
 
     # ── Public API ────────────────────────────────────────────────────────
 
@@ -273,7 +284,7 @@ class SessionLogger:
             "belief_history": belief_history,
         }
 
-        json_path = SESSIONS_DIR / f"{self.session_id}.json"
+        json_path = self.session_dir / "session.json"
         with open(json_path, "w", encoding="utf-8") as f:
             json.dump(session, f, indent=2, ensure_ascii=False)
         print(f"[log] Session JSON → {json_path}")
