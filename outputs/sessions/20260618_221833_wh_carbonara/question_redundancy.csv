@@ -1,0 +1,6 @@
+window,question,category,answer,answer_type,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value,negated_entity
+1,What's your next step after adding the butter?,sequence,,dont_know,0.2019,0.0,,,,,0.0,
+2,What are you putting in the mixing bowl?,ingredient,A cook grates pecorino into the mixing bowl.,affirmative,0.6563,1.1765,3,0.0353,1.1727,1.1374,0.0391,
+3,How are you preparing the pancetta?,method,A cook cooks the pancetta in a skillet.,affirmative,0.4234,0.4999,4,-0.1799,0.4325,0.6124,-0.1125,
+4,Which eggs are you adding next?,ingredient,,dont_know,0.1738,0.0,,,,,0.0,
+5,How are you preparing the pasta?,method,A cook pours the egg miture over the pasta.,affirmative,0.1536,0.2348,6,0.2819,0.0801,-0.2018,0.4366,

@@ -1,0 +1,3 @@
+window,question,question_form,answer_type,proposition,category,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value
+1,Are you adding cream to the skillet?,polar,no,A cook pours cream into the skillet.,ingredient,0.4163,2.4568,2,1.6216,0.9466,-0.675,3.1318
+8,Are you adding pecorino to the mixing bowl?,polar,yes,A cook grates pecorino into a mixing bowl.,ingredient,0.1037,-0.0854,9,-0.0031,0.0349,0.038,-0.1234

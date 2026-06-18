@@ -1,0 +1,7 @@
+window,question,category,answer,answer_type,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value,negated_entity
+1,What's your next step after adding the butter?,sequence,i'm not adding,negative,0.2019,0.0,,,,,0.0,
+2,Could you describe what step you were doing?,clarification,A cook toasts pine nuts in a dry pan.,wh_clarification_confirmed,0.0,1.0357,3,-0.0488,-0.0052,0.0436,0.9921,
+3,How are you preparing the pasta?,method,A cook folds pasta into the pesto.,affirmative,0.5879,1.414,4,-0.807,0.0417,0.8488,0.5652,
+4,Which pasta are you adding next?,ingredient,,dont_know,0.5667,0.0,,,,,0.0,
+5,What is your next step after adding the pasta?,sequence,A cook folds the pasta into the pesto.,affirmative,0.3524,0.3275,6,-0.6645,-0.0088,0.6558,-0.3283,
+6,How are you preparing the sauce?,method,,dont_know,0.2812,0.0,,,,,0.0,

@@ -1,0 +1,5 @@
+window,question,question_form,answer_type,proposition,category,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value
+1,Are you adding cream to the skillet?,polar,no,A cook pours cream into the skillet.,ingredient,0.4163,2.4568,2,0.0473,-0.0682,-0.1155,2.5723
+2,Were you doing 'A cook cooks peas in the skillet.'?,polar,polar_clarification_no,A cook cooks peas in the skillet.,clarification,0.0,0.0,3,0.0042,-0.0052,-0.0094,0.0094
+3,Will you cook the peas in a saucepan?,polar,no,A cook cooks peas in the saucepan.,method,1.2626,0.3683,4,0.044,0.0417,-0.0023,0.3706
+4,Are you adding eggs to a mixing bowl?,polar,no,A cook cracks eggs into a mixing bowl.,ingredient,0.7215,0.5168,5,0.0493,0.0485,-0.0008,0.5176
