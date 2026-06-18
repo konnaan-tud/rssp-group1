@@ -25,6 +25,7 @@ Run:
 
 from __future__ import annotations
 
+import argparse
 import json
 import re
 import sys
@@ -43,27 +44,23 @@ from questioning.questioning_pipeline import (
 )
 from questioning.questioning_planner import should_ask
 from utils.session_logger import SessionLogger
+from utils.clip_loader import available_recipes, discover_clips
+from dialogue.answer_normalizer import (
+    AnswerOutcome,
+    AnswerType,
+    classify_polar_answer,
+)
 
 
 # ─────────────────────────────────────────────────────────────────────────
 # Observation trajectory
 # ─────────────────────────────────────────────────────────────────────────
 
-CLIPS_DIR = Path("data/clips")
+# WINDOWS and GROUND_TRUTH are no longer hardcoded here — they are
+# resolved at `main()` call time from `data/clips/<recipe>/` via
+# `discover_clips`. Override with `--recipe pesto` (or any other folder
+# name under data/clips/).
 
-WINDOWS = [
-    CLIPS_DIR / "01_pour_water.mp4",
-    CLIPS_DIR / "02_crack_egg.mp4",
-    CLIPS_DIR / "03_grating_pecorino.mp4",
-    CLIPS_DIR / "04_chopping_pancetta.mp4",
-    CLIPS_DIR / "05_cooking_pancetta.mp4",
-    CLIPS_DIR / "06_boil_pasta.mp4",
-    CLIPS_DIR / "07_drain_pasta.mp4",
-    CLIPS_DIR / "08_pasta_into_skillet.mp4",
-    CLIPS_DIR / "09_stirring_carbonara.mp4",
-]
-
-GROUND_TRUTH          = "carbonara"
 HUMAN_STUB_MIN_COSINE = 0.40
 
 
@@ -74,13 +71,15 @@ HUMAN_STUB_MIN_COSINE = 0.40
 def pick_human_answer_polar(
     question: dict,
     bu: BeliefUpdaterV3,
+    ground_truth: str,
 ) -> tuple[str, str]:
     """
     Return (answer, proposition) where answer is "yes" or "no".
 
-    Checks cosine between the proposition and carbonara's adaptive
-    near-future scenes. Above HUMAN_STUB_MIN_COSINE → "yes", else "no".
-    In a real experiment this is replaced with input() or audio capture.
+    Checks cosine between the proposition and the ground-truth recipe's
+    adaptive near-future scenes. Above HUMAN_STUB_MIN_COSINE → "yes",
+    else "no". In a real experiment this is replaced with input() or
+    audio capture.
     """
     from questioning.questioning_planner import NEAR_FUTURE_WINDOW, _cosine, _adaptive_window
 
@@ -88,8 +87,8 @@ def pick_human_answer_polar(
     if not proposition:
         return "no", ""
 
-    near = bu.unseen_recipe_scenes(GROUND_TRUTH)
-    window = _adaptive_window(bu, GROUND_TRUTH, base=NEAR_FUTURE_WINDOW)
+    near = bu.unseen_recipe_scenes(ground_truth)
+    window = _adaptive_window(bu, ground_truth, base=NEAR_FUTURE_WINDOW)
     near = near[:window]
 
     if not near:
@@ -101,6 +100,54 @@ def pick_human_answer_polar(
 
     answer = "yes" if best_cos >= HUMAN_STUB_MIN_COSINE else "no"
     return answer, proposition
+
+
+def prompt_yesno_answer(
+    question_text: str,
+    proposition: str,
+) -> tuple[str | None, str]:
+    """
+    Typed-text polar answer. Shows the question AND the proposition so the
+    user knows exactly what they are confirming or denying — a "yes" here
+    incorporates `proposition` as an observation, a "no" stores it as
+    persistent negative evidence.
+
+    Returns
+    -------
+    (answer, proposition)
+        answer = "yes" | "no" | None ; None means "skip this question"
+        proposition is echoed back unchanged so the caller can route it.
+    """
+    print(f"\n  >> Asking    : {question_text}")
+    print(f"     proposition: {proposition}")
+    print("     (type 'y' to confirm, 'n' to deny, or 'skip')")
+    while True:
+        try:
+            raw = input("     your answer (y/n/skip) : ").strip().lower()
+        except EOFError:
+            return None, proposition
+        if raw in ("y", "yes"):
+            return "yes", proposition
+        if raw in ("n", "no"):
+            return "no", proposition
+        if raw in ("", "skip", "s", "dunno", "don't know", "?"):
+            return None, proposition
+        print("     [input] please type 'y', 'n', or 'skip'.")
+
+
+def get_polar_human_answer(
+    question: dict,
+    bu: BeliefUpdaterV3,
+    answer_mode: str,
+    ground_truth: str,
+) -> tuple[str | None, str]:
+    """Dispatch to the configured polar-answer source."""
+    if answer_mode == "text":
+        return prompt_yesno_answer(
+            question["question"],
+            question.get("proposition", ""),
+        )
+    return pick_human_answer_polar(question, bu, ground_truth)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -211,7 +258,18 @@ def generate_vlm_questions(
 # Main loop
 # ─────────────────────────────────────────────────────────────────────────
 
-def main():
+def main(answer_mode: str = "stub", recipe: str = "carbonara"):
+    # 0. Resolve clips + ground-truth label for this dish.
+    try:
+        windows_list, ground_truth = discover_clips(recipe)
+    except (FileNotFoundError, ValueError) as e:
+        print(f"[clips] {e}", file=sys.stderr)
+        return
+    WINDOWS = windows_list
+    GROUND_TRUTH = ground_truth
+    print(f"[session] recipe={recipe!r}  ground_truth={GROUND_TRUTH!r}  "
+          f"{len(WINDOWS)} clips")
+
     missing = [p for p in WINDOWS if not p.exists()]
     if missing:
         print("Missing clip files:")
@@ -360,15 +418,58 @@ def main():
             logger.log_skip()
             continue
 
-        # 6. Ask and route the answer.
-        answer, proposition = pick_human_answer_polar(best_q, bu)
-        print(f"\n  >> Asking    : {best_q['question']}")
-        print(f"     proposition: {proposition}")
-        print(f"     human      : {answer}")
+        # 6. Ask and route the answer. Stub mode returns
+        #    (answer="yes"|"no", proposition); text mode returns
+        #    (answer="yes"|"no"|None, proposition) where None means the
+        #    cook typed "skip" / "don't know" / "doesn't apply" / empty.
+        answer, proposition = get_polar_human_answer(
+            best_q, bu, answer_mode, GROUND_TRUTH,
+        )
+
+        if answer_mode != "text":
+            print(f"\n  >> Asking    : {best_q['question']}")
+            print(f"     proposition: {proposition}")
+        print(f"     human      : {answer if answer is not None else '[skipped]'}")
         print(f"     predicted EIG : {best_q['measured_eig']:+.4f} bits")
 
         if not proposition:
             print("  [skip] No proposition — cannot incorporate, skipping.")
+            continue
+
+        if answer is None:
+            # Typed-text path: cook said skip / don't know / doesn't apply.
+            # No belief update, no IG_Q recorded — but snapshot AND log the
+            # question so it shows on the entropy + redundancy plots.
+            print("  [skip] Cook declined to answer — NO belief update, "
+                  "no IG_Q recorded.")
+            snapshot(
+                step_num=i, event_type="answer_skipped",
+                text=f"[skipped] {proposition}",
+                entropy_before=bu.entropy(),
+            )
+            question_log.append({
+                "window":             i,
+                "question":           best_q["question"],
+                "question_form":      "polar",
+                "answer_type":        "skipped",
+                "proposition":        proposition,
+                "category":           best_q.get("category", "unspecified"),
+                "predicted_eig":      round(best_q["measured_eig"], 4),
+                "ig_q":               0.0,
+                "next_obs_window":    None,
+                "real_ig_next_obs":   None,
+                "shadow_ig_next_obs": None,
+                "redundancy":         None,
+                "unique_value":       0.0,
+            })
+            logger.log_question(
+                window=i, question=best_q["question"],
+                category=best_q.get("category", ""),
+                answer="", answer_type="skipped",
+                predicted_eig=best_q["measured_eig"],
+                realised_ig_q=0.0,
+                proposition=proposition,
+            )
             continue
 
         h_before = bu.entropy()
@@ -450,12 +551,20 @@ def main():
     )
 
     # ── Write CSVs ────────────────────────────────────────────────────────
-    outputs_dir = Path("outputs")
-    outputs_dir.mkdir(exist_ok=True)
+    # Per-session CSVs go into the SessionLogger's session_dir; cross-session
+    # session_summary.csv stays at the top-level outputs/ folder so it
+    # accumulates across runs without overwriting.
+    outputs_root = Path("outputs")
+    outputs_root.mkdir(exist_ok=True)
+    outputs_dir = logger.session_dir
+    outputs_dir.mkdir(parents=True, exist_ok=True)
 
     import csv as _csv
     if history_rows:
-        csv_path = outputs_dir / "belief_history_polar.csv"
+        # Same canonical filename across all three conditions so the plot
+        # script can find it. The session folder already disambiguates by
+        # condition (in the session_id).
+        csv_path = outputs_dir / "belief_history.csv"
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
             writer = _csv.DictWriter(f, fieldnames=list(history_rows[0].keys()))
             writer.writeheader()
@@ -463,7 +572,7 @@ def main():
         print(f"\nWrote belief history → {csv_path}")
 
     if question_log:
-        q_csv = outputs_dir / "question_redundancy_polar.csv"
+        q_csv = outputs_dir / "question_redundancy.csv"
         with open(q_csv, "w", newline="", encoding="utf-8") as f:
             writer = _csv.DictWriter(f, fieldnames=list(question_log[0].keys()))
             writer.writeheader()
@@ -471,7 +580,7 @@ def main():
         print(f"Wrote question redundancy → {q_csv}")
 
     import datetime as _dt
-    summary_csv = outputs_dir / "session_summary.csv"
+    summary_csv = outputs_root / "session_summary.csv"
     summary_row = {
         "timestamp":          _dt.datetime.now().isoformat(timespec="seconds"),
         "condition":          "polar",
@@ -499,8 +608,36 @@ def main():
         writer.writerow(summary_row)
     print(f"Appended session summary → {summary_csv}")
 
-    print("\nPlot with: python scripts/plot_belief.py")
+    print(f"\nPlot with: python scripts/plot_belief.py --session-dir {outputs_dir}")
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run the polar (yes/no) VLM orchestrator end-to-end."
+    )
+    parser.add_argument(
+        "--answer-mode",
+        choices=["stub", "text"],
+        default="stub",
+        help=(
+            "Human-answer source. 'stub' uses the built-in "
+            "cosine-against-proposition simulator; 'text' prompts for "
+            "y/n/skip in the terminal."
+        ),
+    )
+    recipes = available_recipes() or ["carbonara"]
+    parser.add_argument(
+        "--recipe",
+        choices=recipes,
+        default="carbonara" if "carbonara" in recipes else recipes[0],
+        help=(
+            "Dish to run. Clips live in data/clips/<recipe>/. "
+            f"Detected recipes: {', '.join(recipes)}."
+        ),
+    )
+    return parser.parse_args()
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(answer_mode=args.answer_mode, recipe=args.recipe)
