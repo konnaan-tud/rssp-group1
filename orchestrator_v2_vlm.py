@@ -123,13 +123,18 @@ def pick_human_answer(
     """
     q = question_text.lower()
 
-    # Overrides: questions whose true answer is a negation/summary, not a
-    # single recipe scene.
-    if any(w in q for w in ["butter", "cream"]) and any(w in q for w in ["fat", "base", "using"]):
-        return ("No butter and no cream; the fat in carbonara comes from "
-                "rendered pancetta and egg yolks.")
-    if "herb" in q:
-        return "Carbonara does not use fresh herbs, only black pepper."
+    # Carbonara-specific keyword overrides: questions whose true answer is a
+    # negation/summary the simulator can't produce cleanly. These were
+    # calibrated for the carbonara session — applying them to other recipes
+    # would lie (e.g. pesto uses basil, so "no herbs" would be wrong).
+    # Recipe-gated so they only fire when the cook is actually making
+    # carbonara.
+    if ground_truth == "carbonara":
+        if any(w in q for w in ["butter", "cream"]) and any(w in q for w in ["fat", "base", "using"]):
+            return ("No butter and no cream; the fat in carbonara comes from "
+                    "rendered pancetta and egg yolks.")
+        if "herb" in q:
+            return "Carbonara does not use fresh herbs, only black pepper."
 
     # Default: simulate against carbonara and check whether the picked scene
     # is actually relevant to the question.
@@ -186,12 +191,21 @@ def get_raw_human_answer(
 # Hyperparameters
 # ─────────────────────────────────────────────────────────────────────────
 
-# Gate thresholds. Either condition being satisfied skips the question:
-#   - entropy already sharp (low residual uncertainty)
-#   - top recipe already dominant (one clear leader)
-# Picked so the carbonara session asks at windows 1 and 2 (uncertain) but
-# stops by window 3 once carbonara is at 80%+.
-ENTROPY_THRESHOLD = 1.5      # bits; below this skip
+# Gate thresholds. Either condition causes the gate to skip asking at
+# this window:
+#   1. entropy already sharp (low residual uncertainty)
+#   2. top recipe already dominant (one clear leader)
+#
+# We deliberately do NOT have a "top probability floor". An earlier
+# version of the gate refused to ask when top P was below ~3× uniform on
+# the theory that the belief was "too uniform" to ground a question. In
+# practice that injection blocked exactly the case the system should
+# excel at — ambiguous observations where the cook's clarification is
+# the only source of signal. The gate now trusts that the cook can
+# answer informatively even from uniform belief; the EIG threshold and
+# the AnswerOutcome routing (DOESNT_APPLY / OFF_TOPIC silently skip)
+# filter out the rare unproductive asks.
+ENTROPY_THRESHOLD = 1.5      # bits; below this skip (already-confident)
 TOP_PROB_CEILING = 0.75      # if top recipe at or above this, skip
 EIG_THRESHOLD = 0.10         # bits; below this no question is worth asking
 
@@ -266,22 +280,33 @@ def generate_vlm_questions(
     model,
     processor,
     device: str,
+    asked_questions: list[str] | None = None,
 ) -> list[dict]:
     """
     Build the prompt, call Qwen on the already-loaded model, parse the
     JSON response. Reuses the model loaded at session start by
     load_qwen_vlm() — no per-call reload.
+
+    `asked_questions` is the list of question texts already fired this
+    session. Passing it surfaces an "ALREADY ASKED — do not repeat or
+    paraphrase" section inside the prompt so Qwen has explicit memory.
+    The planner also de-dupes against this list (see
+    questioning.questioning_planner.rank_questions).
     """
     context = build_recipe_context(
         belief_updater,
         active_threshold=PROMPT_ACTIVE_THRESHOLD,
         top_k=PROMPT_TOP_K,
+        asked_questions=asked_questions,
     )
     n_active = sum(1 for p in belief_updater.belief.values()
                    if p >= PROMPT_ACTIVE_THRESHOLD)
     print(f"  [VLM] Active recipes in context: {min(n_active, PROMPT_TOP_K)}")
 
-    prompt = build_question_prompt(recipe_context=context)
+    prompt = build_question_prompt(
+        recipe_context=context,
+        asked_questions=asked_questions,
+    )
     print("  [VLM] Generating candidate questions...")
     raw_response = generate_text_with_model(prompt, model, processor, device)
 
@@ -370,6 +395,12 @@ def main(answer_mode: str = "stub", recipe: str = "carbonara"):
     pending_question: dict | None = None
 
     questions_asked = 0
+    # Running list of question texts already fired (or attempted) this
+    # session. Surfaces in the prompt's "ALREADY ASKED" section so Qwen
+    # doesn't paraphrase, and feeds the planner's embedding dedup so the
+    # gate skips near-duplicate candidates even if Qwen ignores the soft
+    # instruction.
+    asked_questions: list[str] = []
     print(f"\nMax entropy: {bu.max_entropy():.3f} bits")
 
     for i, clip_path in enumerate(WINDOWS, start=1):
@@ -444,7 +475,10 @@ def main(answer_mode: str = "stub", recipe: str = "carbonara"):
 
         # 3. EXPENSIVE step — generate candidate questions with the VLM.
         # Uses the same loaded model as the observation step.
-        questions = generate_vlm_questions(bu, model, processor, device)
+        questions = generate_vlm_questions(
+            bu, model, processor, device,
+            asked_questions=asked_questions,
+        )
         if not questions:
             print("  [gate] No usable questions from VLM — skipping.")
             continue
@@ -457,6 +491,7 @@ def main(answer_mode: str = "stub", recipe: str = "carbonara"):
             entropy_threshold=0.0,
             eig_threshold=EIG_THRESHOLD,
             questions_asked=questions_asked,
+            asked_questions=asked_questions,
             max_questions=MAX_QUESTIONS,
         )
 
@@ -489,6 +524,11 @@ def main(answer_mode: str = "stub", recipe: str = "carbonara"):
             print("  [gate] Best EIG below threshold — skipping.")
             logger.log_skip()
             continue
+
+        # Record the question text BEFORE we ask. Covers every downstream
+        # branch (success, NEGATIVE, OFF_TOPIC, DOESNT_APPLY, DONT_KNOW)
+        # in one shot so later windows can't re-ask it or paraphrase it.
+        asked_questions.append(best_q["question"])
 
         # 5. Fire the chosen question. The stub path simulates a
         # carbonara cook; the text path prompts the terminal. Both

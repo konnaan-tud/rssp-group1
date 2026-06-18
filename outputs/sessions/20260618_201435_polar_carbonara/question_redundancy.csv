@@ -1,0 +1,3 @@
+window,question,question_form,answer_type,proposition,category,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value
+2,Are you adding pecorino to the mixing bowl?,polar,yes,A cook grates pecorino into the mixing bowl.,ingredient,0.8161,1.1765,3,0.0353,1.1727,1.1374,0.0391
+3,Will you cook pancetta in a skillet?,polar,yes,A cook cooks pancetta in a skillet.,method,0.4928,0.5345,4,-0.2862,0.4325,0.7187,-0.1842

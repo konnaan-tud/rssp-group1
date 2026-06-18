@@ -157,6 +157,9 @@ def get_polar_human_answer(
 ENTROPY_THRESHOLD       = 1.5
 TOP_PROB_CEILING        = 0.75
 EIG_THRESHOLD           = 0.10
+# No TOP_PROB_FLOOR — see orchestrator_v2_vlm.py for the rationale. The
+# gate trusts the cook to answer informatively even from uniform belief;
+# EIG threshold + AnswerOutcome routing handle the rare unproductive asks.
 MAX_QUESTIONS           = 9_999
 PROMPT_TOP_K            = 6
 PROMPT_ACTIVE_THRESHOLD = 0.02
@@ -229,12 +232,19 @@ def generate_vlm_questions(
     model,
     processor,
     device: str,
+    asked_questions: list[str] | None = None,
 ) -> list[dict]:
-    """Build the polar prompt, call Qwen via Ollama, parse JSON response."""
+    """Build the polar prompt, call Qwen via Ollama, parse JSON response.
+
+    `asked_questions` surfaces in the prompt's ALREADY ASKED section so
+    Qwen doesn't paraphrase. Planner-level dedup is applied in
+    questioning.questioning_planner.rank_questions.
+    """
     context = build_recipe_context(
         belief_updater,
         active_threshold=PROMPT_ACTIVE_THRESHOLD,
         top_k=PROMPT_TOP_K,
+        asked_questions=asked_questions,
     )
     n_active = sum(
         1 for p in belief_updater.belief.values()
@@ -242,7 +252,10 @@ def generate_vlm_questions(
     )
     print(f"  [VLM] Active recipes in context: {min(n_active, PROMPT_TOP_K)}")
 
-    prompt = build_question_prompt_polar(recipe_context=context)
+    prompt = build_question_prompt_polar(
+        recipe_context=context,
+        asked_questions=asked_questions,
+    )
     print("  [VLM] Generating candidate polar questions...")
     raw_response = generate_text_with_model(prompt, model, processor, device)
 
@@ -311,6 +324,10 @@ def main(answer_mode: str = "stub", recipe: str = "carbonara"):
     question_log: list[dict]     = []
     pending_question: dict | None = None
     questions_asked               = 0
+    # Running list of fired/attempted question texts. Surfaces in the
+    # prompt's "ALREADY ASKED" section and feeds the planner's embedding
+    # dedup so the gate skips near-duplicates.
+    asked_questions: list[str]    = []
 
     print(f"\nMax entropy: {bu.max_entropy():.3f} bits")
 
@@ -379,7 +396,10 @@ def main(answer_mode: str = "stub", recipe: str = "carbonara"):
             continue
 
         # 4. Generate polar candidate questions with the VLM.
-        questions = generate_vlm_questions(bu, model, processor, device)
+        questions = generate_vlm_questions(
+            bu, model, processor, device,
+            asked_questions=asked_questions,
+        )
         if not questions:
             print("  [gate] No usable questions from VLM — skipping.")
             continue
@@ -393,6 +413,7 @@ def main(answer_mode: str = "stub", recipe: str = "carbonara"):
             questions_asked=questions_asked,
             max_questions=MAX_QUESTIONS,
             polar=True,
+            asked_questions=asked_questions,
         )
 
         # Per-branch EIG breakdown.
@@ -417,6 +438,11 @@ def main(answer_mode: str = "stub", recipe: str = "carbonara"):
             print("  [gate] Best EIG below threshold — skipping.")
             logger.log_skip()
             continue
+
+        # Record the question text BEFORE we ask. Covers every downstream
+        # branch (yes/no/skipped) so later windows can't re-ask or
+        # paraphrase it.
+        asked_questions.append(best_q["question"])
 
         # 6. Ask and route the answer. Stub mode returns
         #    (answer="yes"|"no", proposition); text mode returns
