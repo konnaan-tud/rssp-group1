@@ -26,6 +26,7 @@ Run:
 
 from __future__ import annotations
 
+import argparse
 import csv
 import sys
 from pathlib import Path
@@ -37,10 +38,24 @@ except ImportError:
     sys.exit(1)
 
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-CSV_PATH = REPO_ROOT / "outputs" / "belief_history.csv"
+REPO_ROOT    = Path(__file__).resolve().parent.parent
+SESSIONS_DIR = REPO_ROOT / "outputs" / "sessions"
+
+# These are resolved at runtime from the session directory (set in main).
+# The module-level constants are kept as backwards-compat defaults.
+CSV_PATH       = REPO_ROOT / "outputs" / "belief_history.csv"
 REDUNDANCY_CSV = REPO_ROOT / "outputs" / "question_redundancy.csv"
-OUT_DIR = REPO_ROOT / "outputs"
+OUT_DIR        = REPO_ROOT / "outputs"
+
+
+def _pick_latest_session_dir() -> Path | None:
+    """Return the most recently modified session folder, or None."""
+    if not SESSIONS_DIR.exists():
+        return None
+    candidates = [p for p in SESSIONS_DIR.iterdir() if p.is_dir()]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda p: p.stat().st_mtime)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -97,16 +112,34 @@ def event_labels(rows: list[dict]) -> list[str]:
             out.append("init")
         elif t == "observation":
             out.append(f"W{s} obs")
+        elif t == "answer_skipped":
+            out.append(f"W{s} skip")
+        elif t in ("answer_yes", "answer_no"):
+            # Polar condition distinguishes yes/no in the event type.
+            tag = "yes" if t == "answer_yes" else "no"
+            out.append(f"W{s} {tag}")
         else:
+            # "answer" (wh) and any future event type
             out.append(f"W{s} ans")
     return out
 
 
 def mark_event_lines(ax, rows: list[dict]):
-    """Add faint vertical lines at answer steps to show where Qs fired."""
+    """
+    Faint vertical lines at every step where a question was asked, with
+    different colours to distinguish:
+      - answer / answer_yes / answer_no → crimson (belief updated)
+      - answer_skipped                  → goldenrod (question asked but the
+                                          cook's reply didn't move belief)
+    """
     for i, r in enumerate(rows):
-        if r["type"] == "answer":
-            ax.axvline(i, color="crimson", alpha=0.25, linestyle="--", linewidth=1)
+        t = r["type"]
+        if t in ("answer", "answer_yes", "answer_no"):
+            ax.axvline(i, color="crimson", alpha=0.25,
+                       linestyle="--", linewidth=1)
+        elif t == "answer_skipped":
+            ax.axvline(i, color="goldenrod", alpha=0.35,
+                       linestyle=":", linewidth=1.4)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -194,13 +227,34 @@ def figure_entropy(rows):
     fig, ax = plt.subplots(figsize=(11, 6))
     ax.plot(xs, ys, marker="o", linewidth=2, color="steelblue")
 
-    # Annotate observations vs answers
+    # Annotate by event type. The hollow gold X marker for "answer_skipped"
+    # is what the supervisor needs to see — those are windows where we DID
+    # ask the cook a question but the reply was OFF_TOPIC / DOESNT_APPLY /
+    # DONT_KNOW / NEGATIVE, so the belief didn't move. Without this marker
+    # those questions are invisible on the plot.
+    seen_labels: set[str] = set()
     for i, r in enumerate(rows):
-        if r["type"] == "observation":
+        t = r["type"]
+        if t == "observation":
             ax.scatter(i, r["entropy"], s=70, color="steelblue", zorder=3)
-        elif r["type"] == "answer":
+        elif t in ("answer", "answer_yes"):
+            lbl = "answer (belief updated)"
             ax.scatter(i, r["entropy"], s=90, color="crimson", zorder=3,
-                       marker="D")
+                       marker="D",
+                       label=lbl if lbl not in seen_labels else None)
+            seen_labels.add(lbl)
+        elif t == "answer_no":
+            lbl = "answer NO (negation)"
+            ax.scatter(i, r["entropy"], s=90, color="darkorange", zorder=3,
+                       marker="v",
+                       label=lbl if lbl not in seen_labels else None)
+            seen_labels.add(lbl)
+        elif t == "answer_skipped":
+            lbl = "asked but skipped (no belief update)"
+            ax.scatter(i, r["entropy"], s=110, color="goldenrod", zorder=3,
+                       marker="X", edgecolors="black", linewidths=1.2,
+                       label=lbl if lbl not in seen_labels else None)
+            seen_labels.add(lbl)
 
     mark_event_lines(ax, rows)
 
@@ -213,8 +267,11 @@ def figure_entropy(rows):
 
     ax.set_xlabel("Session step")
     ax.set_ylabel("Entropy (bits)")
-    ax.set_title("Belief entropy across session  "
-                 "(blue = observation, red diamond = answer)")
+    ax.set_title(
+        "Belief entropy across session\n"
+        "blue dot = observation, red diamond = answer, "
+        "orange ▽ = answer NO, gold X = asked but skipped"
+    )
     ax.set_xticks(xs)
     ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=9)
     ax.grid(True, alpha=0.3)
@@ -296,31 +353,81 @@ def figure_question_redundancy():
         return
 
     xs = list(range(len(rows)))
-    labels = [f"W{r['window']}" for r in rows]
-    ig_q = [r["ig_q"] or 0.0 for r in rows]
-    redundancy = [r["redundancy"] or 0.0 for r in rows]
-    unique = [r["unique_value"] or 0.0 for r in rows]
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    # Tag rows so we can render skipped questions differently. A row is
+    # "skipped" when the answer type isn't an actual belief-changing one
+    # (off_topic, doesnt_apply, dont_know, negative, "skipped") and the
+    # ig_q value is zero. The redundancy is None for those rows because
+    # the question never moved the belief, so no overlap can be measured.
+    SKIPPED_ANSWER_TYPES = {
+        "off_topic", "doesnt_apply", "dont_know", "negative", "skipped",
+    }
+    is_skipped = [
+        (r.get("answer_type") or "") in SKIPPED_ANSWER_TYPES
+        for r in rows
+    ]
+
+    labels = []
+    for r, sk in zip(rows, is_skipped):
+        suffix = ""
+        if sk:
+            t = (r.get("answer_type") or "skipped").replace("_", " ")
+            suffix = f"\n[{t}]"
+        labels.append(f"W{r['window']}{suffix}")
+
+    ig_q       = [r["ig_q"] or 0.0 for r in rows]
+    redundancy = [r["redundancy"] or 0.0 for r in rows]
+    unique     = [r["unique_value"] or 0.0 for r in rows]
+
+    fig, ax = plt.subplots(figsize=(11, 6))
     width = 0.27
-    ax.bar([x - width for x in xs], ig_q, width, label="IG_Q (answer alone)",
-           color="steelblue")
-    ax.bar(xs, redundancy, width, label="Redundancy with next obs",
-           color="darkorange")
-    ax.bar([x + width for x in xs], unique, width, label="Unique value",
-           color="seagreen")
+
+    # IG_Q bar: colour depends on whether the question actually delivered
+    # information or was skipped. Skipped bars are drawn as hatched gold
+    # outlines so the supervisor can immediately see "we asked but learned
+    # nothing" at those windows.
+    answered_xs = [x for x, sk in zip(xs, is_skipped) if not sk]
+    answered_ig = [v for v, sk in zip(ig_q, is_skipped) if not sk]
+    skipped_xs  = [x for x, sk in zip(xs, is_skipped) if sk]
+    skipped_eig = [
+        (r.get("predicted_eig") or 0.0)
+        for r, sk in zip(rows, is_skipped) if sk
+    ]
+
+    if answered_xs:
+        ax.bar([x - width for x in answered_xs], answered_ig, width,
+               label="IG_Q (answer alone)", color="steelblue")
+    if skipped_xs:
+        # Show predicted EIG as a hollow gold bar so the reader sees
+        # what the planner expected from the question that ended up
+        # being skipped. The actual realised IG_Q is zero (no bar).
+        ax.bar([x - width for x in skipped_xs], skipped_eig, width,
+               facecolor="none", edgecolor="goldenrod", linewidth=1.8,
+               hatch="//",
+               label="asked but skipped (predicted EIG shown)")
+
+    # Redundancy and unique value are only meaningful for non-skipped
+    # questions — those have measurable next-observation comparisons.
+    answered_red = [v for v, sk in zip(redundancy, is_skipped) if not sk]
+    answered_uni = [v for v, sk in zip(unique, is_skipped) if not sk]
+    if answered_xs:
+        ax.bar(answered_xs, answered_red, width,
+               label="Redundancy with next obs", color="darkorange")
+        ax.bar([x + width for x in answered_xs], answered_uni, width,
+               label="Unique value", color="seagreen")
 
     ax.axhline(0, color="black", linewidth=0.6)
     ax.set_xticks(xs)
-    ax.set_xticklabels(labels)
+    ax.set_xticklabels(labels, fontsize=8)
     ax.set_xlabel("Question event")
     ax.set_ylabel("Bits")
     ax.set_title(
         "Per-question information value\n"
         "Redundancy = how much of IG_Q the next observation would have "
-        "delivered anyway"
+        "delivered anyway. Hollow gold bars = questions asked but skipped "
+        "(predicted EIG shown; realised IG_Q was zero)."
     )
-    ax.legend()
+    ax.legend(fontsize=8, loc="best")
     ax.grid(True, alpha=0.3, axis="y")
 
     out = OUT_DIR / "figure_question_redundancy.png"
@@ -330,7 +437,51 @@ def figure_question_redundancy():
     print(f"  wrote {out}")
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Plot belief-trajectory figures for one orchestrator session. "
+            "Reads belief_history.csv (and optionally question_redundancy.csv) "
+            "from the given session directory and writes figures alongside."
+        ),
+    )
+    parser.add_argument(
+        "--session-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Path to one outputs/sessions/<session_id>/ folder. "
+            "If omitted, the most recent session folder is used. "
+            "Backwards-compat: pass outputs/ to use the top-level CSVs."
+        ),
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
+    global CSV_PATH, REDUNDANCY_CSV, OUT_DIR
+
+    args = parse_args()
+
+    if args.session_dir is not None:
+        session_dir = args.session_dir.resolve()
+    else:
+        latest = _pick_latest_session_dir()
+        if latest is None:
+            # Fall back to the legacy top-level outputs/ layout.
+            session_dir = REPO_ROOT / "outputs"
+            print("[plot_belief] No session dirs found — using top-level outputs/")
+        else:
+            session_dir = latest
+            print(f"[plot_belief] Auto-selected latest session: {session_dir.name}")
+
+    if not session_dir.exists():
+        print(f"Session directory not found: {session_dir}", file=sys.stderr)
+        sys.exit(1)
+
+    CSV_PATH       = session_dir / "belief_history.csv"
+    REDUNDANCY_CSV = session_dir / "question_redundancy.csv"
+    OUT_DIR        = session_dir
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     print(f"Reading {CSV_PATH}")
