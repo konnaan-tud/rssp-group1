@@ -7,3 +7,14 @@ timestamp,ground_truth,predicted,accuracy,predicted_prob,final_entropy,questions
 2026-06-18T15:46:05,obs_only,pesto pasta,puttanesca pasta,0,0.1033,4.4524,0,29,5,0.0,0.0
 2026-06-18T15:56:06,pesto pasta,puttanesca pasta,0,0.1033,4.4524,0,29,5,0,0
 2026-06-18T16:04:29,polar,pesto pasta,pesto pasta,1,0.9638,0.2362,4,29,5,4.0462,4.2161
+2026-06-18T16:43:36,polar,carbonara,gricia,0,0.8223,1.0018,3,29,9,1.9403,3.3207
+2026-06-18T17:05:48,obs_only,carbonara,carbonara,1,0.5343,2.3717,0,29,9,0.0,0.0
+2026-06-18T17:11:34,polar,carbonara,carbonara,1,0.6896,1.9678,3,29,9,0.8316,2.3268
+2026-06-18T17:34:20,polar,carbonara,gricia,0,0.7433,1.109,2,29,9,2.1836,3.1533
+2026-06-18T17:55:33,polar,carbonara,cacio e pepe,0,0.9157,0.5411,2,29,9,3.2961,4.0071
+2026-06-18T18:27:12,polar,carbonara,carbonara bianca,0,0.4737,1.6126,4,29,9,2.8255,2.9577
+2026-06-18T18:44:19,polar,carbonara,scrambled carbonara,0,0.2644,3.4159,3,29,9,0.7733,1.1545
+2026-06-18T23:45:42,obs_only,pesto pasta,cacio e uova,0,0.1251,4.5747,0,29,6,0.0,0.0
+2026-06-19T00:01:16,obs_only,amatriciana,amatriciana pasta,0,0.2878,3.6903,0,29,10,0.0,0.0
+2026-06-19T00:11:41,amatriciana,amatriciana pasta,0,0.4358,3.2269,3,29,10,1.5497,2.221
+2026-06-19T00:20:41,polar,amatriciana,amatriciana pasta,0,0.3778,3.5142,5,29,10,-0.2118,0.1603

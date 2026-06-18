@@ -1,0 +1,4 @@
+window,question,question_form,answer_type,proposition,category,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value
+1,Are you adding cream next?,polar,no,A cook pours cream into the skillet.,ingredient,0.4163,2.4568,2,1.6216,0.9466,-0.675,3.1318
+7,Are you whisking the egg yolks in a mixing bowl?,polar,yes,A cook whisks egg yolks in a mixing bowl.,method,0.1066,0.1071,8,-0.1246,0.1235,0.248,-0.1409
+8,Will you pour the yolk mixture over the pasta?,polar,no,A cook pours the yolk mixture over the pasta.,sequence,0.3214,-1.7906,9,0.0218,0.0676,0.0458,-1.8364

@@ -1,0 +1,6 @@
+window,question,question_form,answer_type,proposition,category,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value
+1,Will you add cream to the skillet?,polar,no,A cook pours cream into the skillet.,ingredient,0.4163,1.0123,2,1.2414,0.9818,-0.2596,1.2719
+2,Are you adding eggs to the mixing bowl?,polar,no,A cook cracks eggs into a mixing bowl.,ingredient,0.833,-1.1174,3,-0.171,0.0899,0.261,-1.3784
+3,Is the next step adding frozen peas to a saucepan?,polar,no,A cook adds frozen peas to a saucepan.,sequence,1.1427,-0.0238,4,-0.2908,-0.626,-0.3352,0.3114
+4,Is the next step adding black pepper to a skillet?,polar,no,A cook cracks black pepper into a skillet.,sequence,0.4302,0.0377,5,0.1908,0.3444,0.1536,-0.1159
+5,Are you adding pecorino to the mixing bowl?,polar,no,A cook grates pecorino into the mixing bowl.,ingredient,0.4968,-0.1206,6,0.3043,0.1124,-0.1919,0.0713

@@ -1,0 +1,4 @@
+window,question,question_form,answer_type,proposition,category,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value
+1,Are you adding cream next?,polar,no,A cook pours cream into the skillet.,ingredient,0.4163,1.0123,2,2.3774,0.9466,-1.4308,2.4431
+4,Are you whisking the eggs rather than scrambling them?,polar,no,A cook whisks the eggs in the mixing bowl.,method,0.2537,0.1726,5,-0.0603,-0.0099,0.0504,0.1222
+7,Are you tossing the pasta with rendered pancetta?,polar,yes,A cook tosses the pasta with the rendered pancetta.,method,0.7243,0.7554,8,0.1235,0.1235,-0.0,0.7554
