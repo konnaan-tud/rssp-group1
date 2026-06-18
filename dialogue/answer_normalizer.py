@@ -197,9 +197,19 @@ def _inflect_ing_to_3sg(word: str) -> str:
 # ═══════════════════════════════════════════════════════════════════════════
 
 _FIRST_PERSON_PREFIXES = [
+    # ORDER MATTERS: longest / most-specific patterns FIRST so the
+    # multi-word future "I'm going to" isn't shortcut by the present
+    # continuous "I'm" before it.
+    #
+    # Future / intent: "I'm going to grate", "I'm gonna grate",
+    # "I will grate", "I'll grate", "we are going to grate".
+    # Strips back to a bare-stem verb ("grate"), picked up by _BARE_TO_3SG.
+    re.compile(r"^(?:i'm going to|i am going to|i'm gonna|i am gonna|we're going to|we are going to)\s+", re.IGNORECASE),
+    re.compile(r"^(?:i will|i'll|we will|we'll)\s+", re.IGNORECASE),
+    # Present continuous: "I am cracking", "I'm cracking", "we're cracking".
     re.compile(r"^(?:i am|i'm|im|we are|we're)\s+", re.IGNORECASE),
-    re.compile(r"^(?:the cook is|the cook's)\s+", re.IGNORECASE),
-    re.compile(r"^(?:right now|currently|just|now)\s+", re.IGNORECASE),
+    re.compile(r"^(?:the cook will|the cook is|the cook's)\s+", re.IGNORECASE),
+    re.compile(r"^(?:right now|currently|just|now|next)\s+", re.IGNORECASE),
 ]
 
 # Filler / hedging words that can appear before the verb after stripping
@@ -210,7 +220,72 @@ _LEADING_HEDGES = {
     "right", "about",
 }
 
+# Words that END in -ing but are NOT verb-progressives. The naive regex
+# would otherwise treat them as cooking verbs and produce nonsense ("a cook
+# noths", "a cook things", etc).
+_NON_VERB_ING = {
+    "nothing", "something", "anything", "everything", "thing",
+    "morning", "evening",                       # nouns
+    "during", "spring", "ceiling", "string",    # not verb-stems
+    "king", "ring", "wing", "ling",
+}
+
 _ING_RE = re.compile(r"\b([A-Za-zé]+ing)\b")
+
+
+def _find_action_ing(text: str) -> re.Match | None:
+    """
+    Find the first -ing token in `text` that is actually a verb (skip
+    nouns like 'nothing', 'something', etc).
+    """
+    for m in _ING_RE.finditer(text):
+        if m.group(1).lower() not in _NON_VERB_ING:
+            return m
+    return None
+
+# Bare-stem verbs (what comes after "I will" / "I'll"). Derived from the
+# gerund table by stripping the -ing and looking up the 3sg form. Used as
+# a fallback when no -ing verb is found in the sentence — handles future-
+# tense and command-style answers like "I will grate pecorino" or
+# "grate the pecorino".
+_BARE_TO_3SG: dict[str, str] = {
+    # Build from _ING_TO_S by stripping -ing from the keys.
+    word[:-3] if word.endswith("ing") else word: tsg
+    for word, tsg in _ING_TO_S.items()
+    if word.endswith("ing") and len(word) > 4
+}
+# Add a handful of common silent-e bare stems that get lost in the
+# strip-ing transformation above (e.g. "dicing" → "dic" → should be "dice").
+_BARE_TO_3SG.update({
+    "add": "adds", "bake": "bakes", "beat": "beats", "blend": "blends",
+    "boil": "boils", "break": "breaks", "brown": "browns", "brush": "brushes",
+    "char": "chars", "check": "checks", "chill": "chills", "chop": "chops",
+    "coat": "coats", "combine": "combines", "cook": "cooks", "cool": "cools",
+    "cover": "covers", "crack": "cracks", "cream": "creams", "crush": "crushes",
+    "cube": "cubes", "cut": "cuts", "deglaze": "deglazes", "dice": "dices",
+    "dip": "dips", "divide": "divides", "drain": "drains", "drizzle": "drizzles",
+    "drop": "drops", "dry": "dries", "fill": "fills", "finish": "finishes",
+    "flip": "flips", "fold": "folds", "fry": "fries", "garnish": "garnishes",
+    "glaze": "glazes", "grate": "grates", "grease": "greases", "grill": "grills",
+    "grind": "grinds", "halve": "halves", "heat": "heats", "knead": "kneads",
+    "layer": "layers", "make": "makes", "marinate": "marinates", "mash": "mashes",
+    "measure": "measures", "melt": "melts", "mince": "minces", "mix": "mixes",
+    "peel": "peels", "place": "places", "plate": "plates", "poach": "poaches",
+    "pour": "pours", "preheat": "preheats", "prepare": "prepares",
+    "press": "presses", "put": "puts", "reduce": "reduces", "remove": "removes",
+    "render": "renders", "rest": "rests", "rinse": "rinses", "roast": "roasts",
+    "roll": "rolls", "saute": "sautees", "sauté": "sautées",
+    "score": "scores", "scrape": "scrapes", "sear": "sears", "season": "seasons",
+    "separate": "separates", "serve": "serves", "shake": "shakes",
+    "shave": "shaves", "simmer": "simmers", "slice": "slices", "smoke": "smokes",
+    "soak": "soaks", "spread": "spreads", "sprinkle": "sprinkles",
+    "squeeze": "squeezes", "steam": "steams", "stew": "stews", "stir": "stirs",
+    "strain": "strains", "stuff": "stuffs", "take": "takes", "taste": "tastes",
+    "tear": "tears", "thicken": "thickens", "tip": "tips", "top": "tops",
+    "toss": "tosses", "transfer": "transfers", "trim": "trims", "turn": "turns",
+    "twist": "twists", "use": "uses", "wash": "washes", "watch": "watches",
+    "whip": "whips", "whisk": "whisks", "wrap": "wraps", "zest": "zests",
+})
 
 
 def to_recipe_sentence(answer: str) -> str | None:
@@ -258,15 +333,31 @@ def to_recipe_sentence(answer: str) -> str | None:
             break
         text = head[1]
 
-    # Locate first -ing verb anywhere in remaining text
-    match = _ING_RE.search(text)
-    if not match:
-        return None  # caller decides — likely OFF_TOPIC or DOESNT_APPLY
+    # Locate first -ing VERB anywhere in remaining text (skipping nouns
+    # like 'nothing' / 'something' that share the suffix).
+    match = _find_action_ing(text)
+    verb_3sg: str | None = None
+    before = after = ""
 
-    verb_ing = match.group(1)
-    before = text[: match.start()].rstrip()
-    after = text[match.end() :].lstrip()
-    verb_3sg = _inflect_ing_to_3sg(verb_ing)
+    if match:
+        verb_ing = match.group(1)
+        before = text[: match.start()].rstrip()
+        after = text[match.end() :].lstrip()
+        verb_3sg = _inflect_ing_to_3sg(verb_ing)
+    else:
+        # No -ing form anywhere. Fall back to a bare-stem verb at the head
+        # of the sentence — handles future-tense and command-style answers
+        # like "I will grate pecorino" or "grate the pecorino" (the
+        # "I will" prefix has already been stripped above).
+        head = text.split(None, 1)
+        if head:
+            candidate = head[0].lower().rstrip(".,!?")
+            if candidate in _BARE_TO_3SG:
+                verb_3sg = _BARE_TO_3SG[candidate]
+                after = head[1] if len(head) > 1 else ""
+
+    if verb_3sg is None:
+        return None  # caller decides — likely OFF_TOPIC or DOESNT_APPLY
 
     # Discard pre-verb noise — it's adverbs/fillers we couldn't strip.
     # The conversion focuses on action+object, which is what the embedder
@@ -299,6 +390,10 @@ _DOESNT_APPLY_PATTERNS = [
     re.compile(r"\b(not at|haven'?t (?:gotten|reached|got)|not (?:yet|there))\b", re.IGNORECASE),
     re.compile(r"\bnot (?:that|this) step\b", re.IGNORECASE),
     re.compile(r"\bskip(?:ping)? this (?:one|question)\b", re.IGNORECASE),
+    # "nothing" / "none" / "nothing yet" — natural reply when the question's
+    # topic isn't happening right now (e.g. cook is just pouring water and
+    # the question asks "What is being cooked in the skillet?").
+    re.compile(r"^\s*(?:nothing|none)\s*(?:yet|so far)?\s*[.!?]?\s*$", re.IGNORECASE),
 ]
 
 _DONT_KNOW_PATTERNS = [
@@ -449,16 +544,16 @@ def classify_polar_answer(raw_answer: str) -> AnswerOutcome:
 # Relevance gate (off-topic detection)
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Minimum cosine between the answer and any *active* recipe's next scenes
-# for the answer to count as on-topic. Calibrated loosely — below this
-# the answer is treated as OFF_TOPIC and skipped.
+# Minimum cosine between the answer and any recipe's unseen near-future
+# scenes for the answer to count as on-topic. Below this the answer is
+# treated as OFF_TOPIC and skipped. The gate's job is to catch truly
+# unrelated input ("my cat jumped on the counter"), not to enforce
+# alignment with what we currently believe.
 RELEVANCE_THRESHOLD = 0.25
 
-# How far ahead to look when checking topical relevance.
+# How far ahead to look in each recipe's remaining scenes when checking
+# topical relevance.
 RELEVANCE_HORIZON = 5
-
-# Belief-mass threshold for a recipe to count as "active" for the gate.
-RELEVANCE_ACTIVE_MASS = 0.02
 
 
 def _max_relevance_cosine(
@@ -466,24 +561,27 @@ def _max_relevance_cosine(
     belief_updater: "BeliefUpdaterV3",
 ) -> float:
     """
-    Max cosine between `candidate` and any near-future scene of any
-    currently-active recipe. Higher = more on-topic.
-    """
-    active = [
-        name
-        for name, prob in belief_updater.belief.items()
-        if prob >= RELEVANCE_ACTIVE_MASS
-    ]
-    if not active:
-        return 0.0
+    Max cosine between `candidate` and the near-future scenes of ANY
+    recipe in the database — not just the currently-active subset.
 
+    Why all recipes, not just the active ones: the relevance gate is
+    supposed to ask "is this a sensible cooking sentence?", not "does it
+    match the recipes we currently think are likely?". If we filter by
+    current belief, we throw away exactly the answers that could RESCUE
+    a recipe from low probability — which is the whole point of letting
+    the cook clarify. A perfect answer for pesto pasta got dismissed as
+    off-topic in a session where pesto pasta's belief had dropped below
+    the active threshold; scanning all recipes prevents that failure
+    mode. The cost is ~29 small embedding lookups instead of ~5; the
+    embedder caches everything so it's effectively free.
+    """
     cand_vec = belief_updater._embedder.embed(candidate)
     cand_norm = float(np.linalg.norm(cand_vec))
     if cand_norm == 0.0:
         return 0.0
 
     best = 0.0
-    for name in active:
+    for name in belief_updater.belief.keys():
         scenes = belief_updater.unseen_recipe_scenes(name)[:RELEVANCE_HORIZON]
         if not scenes:
             continue

@@ -151,6 +151,101 @@ def get_polar_human_answer(
 
 
 # ─────────────────────────────────────────────────────────────────────────
+# Observation-clarification mode — POLAR FORM
+#
+# Critical: the polar condition forbids free-text cook answers, so the
+# clarification question MUST also be yes/no. Asking "describe what step
+# you were doing" (as the wh orchestrator does) would break the polar
+# experimental condition.
+#
+# Polar clarification procedure:
+#   1. Compute max cosine of the VLM observation against any recipe
+#      scene. If above OBSERVATION_RECOGNITION_THRESHOLD, the observation
+#      is recognised → no clarification, return as-is.
+#   2. Otherwise, find the SINGLE best-matching recipe scene by cosine
+#      across all recipes — our best guess at what the cook just did.
+#   3. Ask the cook "Were you [best-scene]?" as a yes/no question.
+#   4. If yes: use the best-scene as the (corrected) observation.
+#      If no: keep the original VLM observation (it's still our best
+#      data; we just couldn't confirm a better one in one polar question).
+#
+# Not counted as a polar experimental question — this is an observation-
+# fixing step, not a discrimination question. Runs in --answer-mode text
+# only.
+# ─────────────────────────────────────────────────────────────────────────
+
+OBSERVATION_RECOGNITION_THRESHOLD = 0.55
+OBSERVATION_CLARIFY_MIN_GUESS_COSINE = 0.30
+
+
+def maybe_clarify_observation(
+    observation: str,
+    bu: BeliefUpdaterV3,
+    answer_mode: str,
+    threshold: float = OBSERVATION_RECOGNITION_THRESHOLD,
+) -> tuple[str, dict | None]:
+    """
+    Polar-condition observation clarifier. Returns (vlm_sentence, meta):
+      - vlm_sentence is ALWAYS the original VLM observation.
+      - meta is None if no clarification was asked, or a dict with the
+        polar question metadata for logging + mutual exclusion. Keys:
+          fired           : True
+          confirmed       : True if cook answered yes
+          question        : the yes/no question we asked
+          proposition     : best-guess recipe scene we asked about
+          raw_answer      : cook's literal y/n input
+          incorporate_as_answer : best_scene when confirmed; None
+                            otherwise (cook said no → no belief update)
+          answer_type     : "polar_clarification_yes" or
+                            "polar_clarification_no"
+    """
+    if answer_mode != "text" or not observation:
+        return observation, None
+
+    best_scene, best_cos = bu.best_recipe_scene_match(observation)
+    if best_cos >= threshold:
+        return observation, None  # recognised
+
+    if not best_scene or best_cos < OBSERVATION_CLARIFY_MIN_GUESS_COSINE:
+        print(f"  [clarify] VLM observation matched no recipe scene "
+              f"(best cos {best_cos:.3f}); no plausible polar guess.")
+        return observation, None  # no question worth asking
+
+    question_text = f"Were you doing {best_scene!r}?"
+    print(f"  [clarify] VLM observation matched no recipe scene closely "
+          f"(best cos {best_cos:.3f} < {threshold}).")
+    print(f"  [clarify] VLM said : {observation!r}")
+    print(f"  [clarify] Best guess: {best_scene!r}")
+    print(f"  [clarify] Were you doing that step? (y/n)")
+    try:
+        raw = input("  your answer (y/n) : ").strip().lower()
+    except EOFError:
+        raw = ""
+
+    if raw in ("y", "yes"):
+        print(f"  [clarify] using clarified observation: {best_scene}")
+        return observation, {
+            "fired": True, "confirmed": True,
+            "question": question_text,
+            "proposition": best_scene,
+            "raw_answer": raw,
+            "incorporate_as_answer": best_scene,
+            "answer_type": "polar_clarification_yes",
+        }
+
+    print(f"  [clarify] keeping original VLM observation "
+          f"(cook said no / unknown).")
+    return observation, {
+        "fired": True, "confirmed": False,
+        "question": question_text,
+        "proposition": best_scene,
+        "raw_answer": raw,
+        "incorporate_as_answer": None,
+        "answer_type": "polar_clarification_no",
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────
 # Hyperparameters
 # ─────────────────────────────────────────────────────────────────────────
 
@@ -341,7 +436,8 @@ def main(answer_mode: str = "stub", recipe: str = "carbonara"):
             print("  [warn] VLM returned empty observation; skipping update.")
             continue
 
-        # 2. Update both updaters.
+        # 2. Update both updaters with the ORIGINAL VLM observation.
+        # Clarification (if any) runs as a separate incorporate_answer.
         entropy_before_obs        = bu.entropy()
         shadow_entropy_before_obs = bu_obs_only.entropy()
 
@@ -386,6 +482,65 @@ def main(answer_mode: str = "stub", recipe: str = "carbonara"):
             )
             question_log.append(pending_question)
             pending_question = None
+
+        # 2c. Observation clarification (text mode only). Polar-form
+        # yes/no question about the best-matching recipe scene. If
+        # clarification fires (regardless of answer), the discrimination
+        # question pipeline is SKIPPED for this window — mutual
+        # exclusion: one question per window max.
+        _vlm_sentence, clar_meta = maybe_clarify_observation(
+            sentence, bu, answer_mode,
+        )
+        if clar_meta is not None:
+            asked_questions.append(clar_meta["question"])
+            if clar_meta["confirmed"] and clar_meta["incorporate_as_answer"]:
+                h_before_clarif = bu.entropy()
+                bu.incorporate_answer(clar_meta["incorporate_as_answer"])
+                h_after_clarif = bu.entropy()
+                ig_q_clarif = h_before_clarif - h_after_clarif
+                snapshot(
+                    step_num=i, event_type="answer_clarification",
+                    text=clar_meta["incorporate_as_answer"],
+                    entropy_before=h_before_clarif,
+                )
+                print(f"  [clarify] realised IG_Q : {ig_q_clarif:+.4f} bits")
+            else:
+                ig_q_clarif = 0.0
+                snapshot(
+                    step_num=i, event_type="answer_clarification_skipped",
+                    text=f"[{clar_meta['answer_type']}] {clar_meta['raw_answer']}",
+                    entropy_before=bu.entropy(),
+                )
+                print(f"  [clarify] skipped: {clar_meta['answer_type']}; "
+                      f"no belief update.")
+
+            logger.log_question(
+                window=i, question=clar_meta["question"],
+                category="clarification",
+                answer=clar_meta["incorporate_as_answer"] or clar_meta["raw_answer"],
+                answer_type=clar_meta["answer_type"],
+                predicted_eig=0.0,
+                realised_ig_q=ig_q_clarif,
+                proposition=clar_meta["proposition"],
+            )
+            pending_question = {
+                "window":             i,
+                "question":           clar_meta["question"],
+                "question_form":      "polar",
+                "answer_type":        clar_meta["answer_type"],
+                "proposition":        clar_meta["proposition"],
+                "category":           "clarification",
+                "predicted_eig":      0.0,
+                "ig_q":               round(ig_q_clarif, 4),
+                "next_obs_window":    None,
+                "real_ig_next_obs":   None,
+                "shadow_ig_next_obs": None,
+                "redundancy":         None,
+                "unique_value":       round(ig_q_clarif, 4),
+            }
+            questions_asked += 1
+            # MUTUAL EXCLUSION: skip discrimination pipeline this window.
+            continue
 
         # 3. Cheap gate.
         if bu.entropy() < ENTROPY_THRESHOLD:

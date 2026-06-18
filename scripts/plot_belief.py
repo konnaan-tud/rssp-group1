@@ -118,6 +118,10 @@ def event_labels(rows: list[dict]) -> list[str]:
             # Polar condition distinguishes yes/no in the event type.
             tag = "yes" if t == "answer_yes" else "no"
             out.append(f"W{s} {tag}")
+        elif t == "answer_clarification":
+            out.append(f"W{s} clar")
+        elif t == "answer_clarification_skipped":
+            out.append(f"W{s} clar?")
         else:
             # "answer" (wh) and any future event type
             out.append(f"W{s} ans")
@@ -128,9 +132,10 @@ def mark_event_lines(ax, rows: list[dict]):
     """
     Faint vertical lines at every step where a question was asked, with
     different colours to distinguish:
-      - answer / answer_yes / answer_no → crimson (belief updated)
-      - answer_skipped                  → goldenrod (question asked but the
-                                          cook's reply didn't move belief)
+      - answer / answer_yes / answer_no → crimson (discrimination Q, belief updated)
+      - answer_skipped                  → goldenrod (asked but no belief update)
+      - answer_clarification            → mediumorchid (clarification confirmed)
+      - answer_clarification_skipped    → light orchid (clarification declined)
     """
     for i, r in enumerate(rows):
         t = r["type"]
@@ -140,6 +145,12 @@ def mark_event_lines(ax, rows: list[dict]):
         elif t == "answer_skipped":
             ax.axvline(i, color="goldenrod", alpha=0.35,
                        linestyle=":", linewidth=1.4)
+        elif t == "answer_clarification":
+            ax.axvline(i, color="mediumorchid", alpha=0.30,
+                       linestyle="-.", linewidth=1.2)
+        elif t == "answer_clarification_skipped":
+            ax.axvline(i, color="mediumorchid", alpha=0.18,
+                       linestyle=":", linewidth=1.2)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -255,6 +266,19 @@ def figure_entropy(rows):
                        marker="X", edgecolors="black", linewidths=1.2,
                        label=lbl if lbl not in seen_labels else None)
             seen_labels.add(lbl)
+        elif t == "answer_clarification":
+            lbl = "clarification confirmed"
+            ax.scatter(i, r["entropy"], s=100, color="mediumorchid", zorder=3,
+                       marker="s", edgecolors="black", linewidths=0.9,
+                       label=lbl if lbl not in seen_labels else None)
+            seen_labels.add(lbl)
+        elif t == "answer_clarification_skipped":
+            lbl = "clarification declined"
+            ax.scatter(i, r["entropy"], s=100, color="mediumorchid", zorder=3,
+                       marker="s", edgecolors="black", linewidths=0.9,
+                       alpha=0.4,
+                       label=lbl if lbl not in seen_labels else None)
+            seen_labels.add(lbl)
 
     mark_event_lines(ax, rows)
 
@@ -269,8 +293,8 @@ def figure_entropy(rows):
     ax.set_ylabel("Entropy (bits)")
     ax.set_title(
         "Belief entropy across session\n"
-        "blue dot = observation, red diamond = answer, "
-        "orange ▽ = answer NO, gold X = asked but skipped"
+        "blue = obs, red ♦ = answer, orange ▽ = NO, gold ✕ = skipped, "
+        "purple ■ = clarification"
     )
     ax.set_xticks(xs)
     ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=9)
@@ -354,26 +378,39 @@ def figure_question_redundancy():
 
     xs = list(range(len(rows)))
 
-    # Tag rows so we can render skipped questions differently. A row is
-    # "skipped" when the answer type isn't an actual belief-changing one
-    # (off_topic, doesnt_apply, dont_know, negative, "skipped") and the
-    # ig_q value is zero. The redundancy is None for those rows because
-    # the question never moved the belief, so no overlap can be measured.
+    # Tag rows by question kind. Three classes:
+    #   - DISCRIMINATION confirmed (IG_Q != 0, belief moved): standard
+    #     blue/orange/green triple bars.
+    #   - DISCRIMINATION skipped   (cook said don't-know / off-topic etc.):
+    #     hollow gold bar showing predicted EIG.
+    #   - CLARIFICATION (category == "clarification"): purple bars to make
+    #     it visually obvious these came from the observation-clarification
+    #     path, not the discrimination path. Same redundancy decomposition.
     SKIPPED_ANSWER_TYPES = {
         "off_topic", "doesnt_apply", "dont_know", "negative", "skipped",
+        "wh_clarification_skipped", "wh_clarification_off_topic",
+        "polar_clarification_no",
     }
+    is_clarification = [
+        (r.get("category") or "") == "clarification"
+        for r in rows
+    ]
     is_skipped = [
         (r.get("answer_type") or "") in SKIPPED_ANSWER_TYPES
         for r in rows
     ]
 
     labels = []
-    for r, sk in zip(rows, is_skipped):
-        suffix = ""
-        if sk:
+    for r, sk, cl in zip(rows, is_skipped, is_clarification):
+        tag = ""
+        if cl:
+            tag = " clar"
+            if sk:
+                tag += "?"
+        elif sk:
             t = (r.get("answer_type") or "skipped").replace("_", " ")
-            suffix = f"\n[{t}]"
-        labels.append(f"W{r['window']}{suffix}")
+            tag = f"\n[{t}]"
+        labels.append(f"W{r['window']}{tag}")
 
     ig_q       = [r["ig_q"] or 0.0 for r in rows]
     redundancy = [r["redundancy"] or 0.0 for r in rows]
@@ -382,32 +419,50 @@ def figure_question_redundancy():
     fig, ax = plt.subplots(figsize=(11, 6))
     width = 0.27
 
-    # IG_Q bar: colour depends on whether the question actually delivered
-    # information or was skipped. Skipped bars are drawn as hatched gold
-    # outlines so the supervisor can immediately see "we asked but learned
-    # nothing" at those windows.
-    answered_xs = [x for x, sk in zip(xs, is_skipped) if not sk]
-    answered_ig = [v for v, sk in zip(ig_q, is_skipped) if not sk]
-    skipped_xs  = [x for x, sk in zip(xs, is_skipped) if sk]
-    skipped_eig = [
+    # Partition x positions into three groups for bar styling.
+    disc_answered_xs = [x for x, sk, cl in zip(xs, is_skipped, is_clarification)
+                        if not sk and not cl]
+    disc_answered_ig = [v for v, sk, cl in zip(ig_q, is_skipped, is_clarification)
+                        if not sk and not cl]
+    disc_skipped_xs  = [x for x, sk, cl in zip(xs, is_skipped, is_clarification)
+                        if sk and not cl]
+    disc_skipped_eig = [
         (r.get("predicted_eig") or 0.0)
-        for r, sk in zip(rows, is_skipped) if sk
+        for r, sk, cl in zip(rows, is_skipped, is_clarification)
+        if sk and not cl
     ]
+    clar_xs       = [x for x, cl in zip(xs, is_clarification) if cl]
+    clar_ig       = [v for v, cl in zip(ig_q, is_clarification) if cl]
+    clar_skipped  = [r.get("answer_type", "") in SKIPPED_ANSWER_TYPES
+                     for r, cl in zip(rows, is_clarification) if cl]
 
-    if answered_xs:
-        ax.bar([x - width for x in answered_xs], answered_ig, width,
-               label="IG_Q (answer alone)", color="steelblue")
-    if skipped_xs:
-        # Show predicted EIG as a hollow gold bar so the reader sees
-        # what the planner expected from the question that ended up
-        # being skipped. The actual realised IG_Q is zero (no bar).
-        ax.bar([x - width for x in skipped_xs], skipped_eig, width,
+    if disc_answered_xs:
+        ax.bar([x - width for x in disc_answered_xs], disc_answered_ig, width,
+               label="IG_Q (discrimination answer)", color="steelblue")
+    if disc_skipped_xs:
+        ax.bar([x - width for x in disc_skipped_xs], disc_skipped_eig, width,
                facecolor="none", edgecolor="goldenrod", linewidth=1.8,
                hatch="//",
-               label="asked but skipped (predicted EIG shown)")
+               label="discrimination asked but skipped (pred EIG shown)")
+    if clar_xs:
+        # Solid purple = confirmed clarification; lighter = declined.
+        confirmed_clar_xs = [x for x, sk in zip(clar_xs, clar_skipped) if not sk]
+        confirmed_clar_ig = [v for v, sk in zip(clar_ig, clar_skipped) if not sk]
+        skipped_clar_xs = [x for x, sk in zip(clar_xs, clar_skipped) if sk]
+        if confirmed_clar_xs:
+            ax.bar([x - width for x in confirmed_clar_xs], confirmed_clar_ig,
+                   width, color="mediumorchid",
+                   label="IG_Q (clarification confirmed)")
+        if skipped_clar_xs:
+            # Declined clarification has IG_Q = 0 (no bar); just mark x-tick.
+            ax.bar([x - width for x in skipped_clar_xs], [0.0]*len(skipped_clar_xs),
+                   width, color="none", edgecolor="mediumorchid",
+                   linewidth=1.2, linestyle=":",
+                   label="clarification declined")
 
-    # Redundancy and unique value are only meaningful for non-skipped
-    # questions — those have measurable next-observation comparisons.
+    # Redundancy and unique value rendered for any non-skipped row
+    # (discrimination OR confirmed clarification — both produced an IG_Q).
+    answered_xs = [x for x, sk in zip(xs, is_skipped) if not sk]
     answered_red = [v for v, sk in zip(redundancy, is_skipped) if not sk]
     answered_uni = [v for v, sk in zip(unique, is_skipped) if not sk]
     if answered_xs:

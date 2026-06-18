@@ -277,6 +277,111 @@ class BeliefUpdaterV3:
         """Strings of all observations (clips + answers) added so far, in order."""
         return [meta["sentence"] for meta in self._scene.get_sentences()]
 
+    def max_recipe_scene_cosine(self, sentence: str) -> float:
+        """
+        Highest cosine between `sentence` and any scene in any recipe.
+
+        Thin wrapper over `best_recipe_scene_match` that returns only the
+        cosine. Kept for callers that just want the recognition score.
+        """
+        _, cos = self.best_recipe_scene_match(sentence)
+        return cos
+
+    def best_recipe_scene_match(
+        self,
+        sentence: str,
+    ) -> tuple[str | None, float]:
+        """
+        Return (best_scene, best_cosine) — the recipe scene most
+        semantically similar to `sentence` across ALL recipes.
+
+        Used by both clarification modes:
+          - wh:    only the cosine is checked (free-form clarification)
+          - polar: the best scene becomes the proposition for a "Were
+                   you [scene]?" yes/no question, since the polar
+                   condition forbids free-text answers from the cook.
+
+        Returns (None, 0.0) when no scenes are loaded or the input is
+        empty.
+        """
+        sentence = (sentence or "").strip()
+        if not sentence or not self.recipe_sentences:
+            return None, 0.0
+
+        cand_vec = self._embedder.embed(sentence)
+        cand_norm = float(np.linalg.norm(cand_vec))
+        if cand_norm == 0.0:
+            return None, 0.0
+
+        best_scene: str | None = None
+        best_cos = 0.0
+        for scenes in self.recipe_sentences.values():
+            if not scenes:
+                continue
+            scene_vecs = self._embedder.embed_batch(scenes)
+            for scene, vec in zip(scenes, scene_vecs):
+                n = float(np.linalg.norm(vec))
+                if n == 0.0:
+                    continue
+                c = float(np.dot(cand_vec, vec) / (cand_norm * n))
+                if c > best_cos:
+                    best_cos = c
+                    best_scene = scene
+        return best_scene, best_cos
+
+    def recipe_cursor(
+        self,
+        recipe_name: str,
+        cosine_threshold: float = 0.75,
+    ) -> int:
+        """
+        Highest recipe-scene INDEX matched by any observation so far.
+
+        Returns -1 if no observation matches any scene of this recipe.
+        Used by the planner's simulator to filter out scenes that lie
+        BEFORE the cook's current position in this recipe — i.e. scenes
+        that haven't been observed because they were skipped on camera,
+        not because the cook is about to do them.
+
+        Example: pesto pasta has 8 scenes. If observations match scenes
+        {1, 3, 4, 5, 7}, the cursor is 7 — the cook has advanced past
+        scene 7. Scenes 2, 6, 8 are still "unseen" but only scene 8 is
+        actually IN THE FUTURE; scenes 2 and 6 are skipped-on-camera
+        history. The simulator uses the cursor to discard 2 and 6 when
+        answering "what's next" questions.
+
+        Without this filter the simulator would return "toasts pine nuts"
+        (recipe scene 2) as the cook's "next" action even when the cook
+        is already finishing the dish.
+        """
+        scenes = self.recipe_sentences.get(recipe_name, [])
+        if not scenes:
+            return -1
+
+        observed = self.observed_sentences()
+        if not observed:
+            return -1
+
+        scene_vecs = self._embedder.embed_batch(scenes)
+        obs_vecs = self._embedder.embed_batch(observed)
+
+        cursor = -1
+        for idx, (scene, s_vec) in enumerate(zip(scenes, scene_vecs)):
+            sn = float(np.linalg.norm(s_vec))
+            if sn == 0.0:
+                continue
+            best = 0.0
+            for o_vec in obs_vecs:
+                on = float(np.linalg.norm(o_vec))
+                if on == 0.0:
+                    continue
+                c = float(np.dot(s_vec, o_vec) / (sn * on))
+                if c > best:
+                    best = c
+            if best >= cosine_threshold and idx > cursor:
+                cursor = idx
+        return cursor
+
     def unseen_recipe_scenes(
         self,
         recipe_name: str,

@@ -60,6 +60,16 @@ NEAR_FUTURE_WINDOW = 3
 # the mass to be answerable for full credit.
 MIN_ANSWERABLE_MASS_FRACTION = 0.5
 
+# When the generic-question fallback rescues a wh-question whose embedding
+# didn't clear the per-recipe cosine gate, we multiply its EIG by this
+# factor. Specific questions whose embeddings DID clear the gate keep
+# their full EIG, so they outrank generic-fallback questions in the
+# planner's ranking when both are available. Generic-fallback questions
+# still produce a non-zero EIG so they survive when nothing specific is
+# on offer. 0.5 is a balance: specific wins ~2× margin, generic still
+# clears the 0.10 bit EIG threshold most of the time.
+GENERIC_FALLBACK_EIG_PENALTY = 0.5
+
 # Minimum cosine between the question and the best near-future scene for
 # the planner to consider this recipe-branch "applicable" to the question.
 # If the best cosine is below this, simulate_answer returns None, the
@@ -101,6 +111,7 @@ def simulate_answer(
     belief_updater: BeliefUpdaterV3,
     near_future_window: int | None = None,
     min_cosine: float = APPLICABLE_MIN_COSINE,
+    mode: str = "future",
 ) -> str | None:
     """
     Hypothetical scene-style answer the human would give if `recipe_name`
@@ -128,6 +139,34 @@ def simulate_answer(
     unseen = belief_updater.unseen_recipe_scenes(recipe_name)
     if not unseen:
         return None
+
+    # SEQUENCE-AWARE FILTER: drop unseen scenes that lie BEFORE the
+    # cook's current position in this recipe. The belief updater already
+    # cares about order (via the order_consistency bonus), so the
+    # simulator should too. Without this filter the simulator can pick
+    # a recipe scene from the past — e.g. by Window 6 of pesto pasta,
+    # "toasts pine nuts" (scene 2) was returned as the cook's "next"
+    # action even though the cook is already at scene 7.
+    #
+    # In CLARIFICATION mode we intentionally do NOT apply the cursor
+    # filter: clarification questions ask about the CURRENT (just-
+    # observed) action, which can map to a skipped-earlier scene as
+    # easily as to a future one. The cook may have done step 2 off-camera
+    # and the ambiguous observation is finally revealing it.
+    if mode != "clarification":
+        cursor = belief_updater.recipe_cursor(recipe_name)
+        if cursor >= 0:
+            all_scenes = belief_updater.recipe_sentences.get(recipe_name, [])
+            future_unseen = [
+                s for i, s in enumerate(all_scenes)
+                if i > cursor and s in unseen
+            ]
+            if future_unseen:
+                unseen = future_unseen
+            # If no scenes lie strictly after the cursor (cook has reached
+            # the recipe's last matched scene with skips earlier), fall back
+            # to the original unseen list so we always have something to
+            # simulate.
 
     if near_future_window is None:
         near_future_window = _adaptive_window(belief_updater, recipe_name)
@@ -157,6 +196,7 @@ def simulate_polar_answer(
     recipe_name: str,
     belief_updater: BeliefUpdaterV3,
     min_cosine: float = APPLICABLE_MIN_COSINE,
+    mode: str = "future",
 ) -> str | None:
     """
     Polar analogue of simulate_answer. Returns "yes" or "no" — what
@@ -176,6 +216,21 @@ def simulate_polar_answer(
     unseen = belief_updater.unseen_recipe_scenes(recipe_name)
     if not unseen:
         return None
+
+    # Same sequence-aware filter as simulate_answer — drop scenes that
+    # are before the cook's current recipe-position (skipped on camera).
+    # In CLARIFICATION mode we skip this filter (the proposition may
+    # refer to a skipped-earlier scene).
+    if mode != "clarification":
+        cursor = belief_updater.recipe_cursor(recipe_name)
+        if cursor >= 0:
+            all_scenes = belief_updater.recipe_sentences.get(recipe_name, [])
+            future_unseen = [
+                s for i, s in enumerate(all_scenes)
+                if i > cursor and s in unseen
+            ]
+            if future_unseen:
+                unseen = future_unseen
 
     window = _adaptive_window(belief_updater, recipe_name)
     near = unseen[:max(1, window)]
@@ -218,14 +273,48 @@ def expected_information_gain(
         belief_updater.belief.items(), key=lambda x: -x[1]
     )[:top_k]
 
-    eig = 0.0
-    branches: list[dict] = []
-    for recipe_name, p_r in candidates:
+    # First pass: try the standard cosine-gated simulator per recipe.
+    raw_answers: list[str | None] = []
+    for recipe_name, _ in candidates:
         if polar:
             ans = simulate_polar_answer(question, recipe_name, belief_updater)
         else:
             ans = simulate_answer(question, recipe_name, belief_updater)
+        raw_answers.append(ans)
 
+    # GENERIC-QUESTION FALLBACK (wh only). If EVERY top-k branch returned
+    # None, it usually means the question is too generic to match any
+    # specific scene by cosine — e.g. "What are you adding next?" or
+    # "What is the next step?". The question's embedding is abstract and
+    # the recipe scenes are concrete, so the best cosine for every recipe
+    # sits below APPLICABLE_MIN_COSINE = 0.35.
+    #
+    # For polar questions we don't apply the fallback: a yes/no question
+    # whose proposition doesn't match any recipe's near-future genuinely
+    # IS unanswerable (the cook can't say "yes" to a scene that isn't
+    # coming up). For wh-questions, "what's next?" maps naturally to each
+    # recipe's literal first near-future scene — that's what a real cook
+    # would answer.
+    fallback_applied = False
+    if not polar and all(a is None for a in raw_answers):
+        has_any_unseen = any(
+            belief_updater.unseen_recipe_scenes(r)
+            for r, _ in candidates
+        )
+        if has_any_unseen:
+            print("  [planner] generic-question fallback: no scene cleared "
+                  f"cosine {APPLICABLE_MIN_COSINE} for any recipe — using "
+                  f"each recipe's literal next scene (EIG will be penalised "
+                  f"by ×{GENERIC_FALLBACK_EIG_PENALTY} so specific questions "
+                  f"outrank generic ones).")
+            for i, (recipe_name, _) in enumerate(candidates):
+                unseen = belief_updater.unseen_recipe_scenes(recipe_name)
+                raw_answers[i] = unseen[0] if unseen else None
+            fallback_applied = True
+
+    eig = 0.0
+    branches: list[dict] = []
+    for (recipe_name, p_r), ans in zip(candidates, raw_answers):
         if ans is None:
             # Nothing to simulate — treat as zero contribution.
             branches.append({
@@ -282,7 +371,63 @@ def expected_information_gain(
     if answerability < MIN_ANSWERABLE_MASS_FRACTION:
         eig *= answerability
 
+    # Generic-question penalty: if the EIG was earned via the fallback path
+    # (literal next scene per recipe instead of cosine-matched scene),
+    # multiply by GENERIC_FALLBACK_EIG_PENALTY so specific questions whose
+    # embeddings cleared the cosine gate outscore generic ones in ranking.
+    if fallback_applied:
+        eig *= GENERIC_FALLBACK_EIG_PENALTY
+
     return eig, branches
+
+
+# Embedding-level dedup threshold. Two questions whose sentence-encoder
+# cosine is above this are treated as near-identical paraphrases of each
+# other — the later one is dropped from the candidate pool, even if Qwen
+# ignored the "ALREADY ASKED" prompt instruction.
+#
+# Calibration: 0.85 was too aggressive — it killed entire candidate
+# batches in late windows once the discriminating-question space was
+# exhausted, and the orchestrator skipped asking even when the belief
+# was still uncertain (top P around 0.30). 0.92 only fires for
+# near-verbatim repeats ("What is being added to the skillet?" vs
+# "What is being added to the skillet?") and lets distinct rewordings
+# through. When dedup STILL kills everything, rank_questions falls back
+# to the un-deduped pool — see _maybe_relax_dedup below.
+DEDUP_COSINE_THRESHOLD = 0.92
+
+
+def _drop_paraphrases_of_asked(
+    questions: list[dict],
+    asked_questions: list[str],
+    belief_updater: BeliefUpdaterV3,
+    threshold: float = DEDUP_COSINE_THRESHOLD,
+) -> list[dict]:
+    """
+    Drop any candidate whose embedding cosine to a previously-asked
+    question exceeds `threshold`. Backstop for when Qwen ignores the
+    "ALREADY ASKED" prompt section.
+    """
+    if not asked_questions:
+        return questions
+
+    asked_vecs = belief_updater._embedder.embed_batch(asked_questions)
+    kept: list[dict] = []
+    for q in questions:
+        q_text = (q.get("question") or "").strip()
+        if not q_text:
+            continue
+        q_vec = belief_updater._embedder.embed(q_text)
+        too_similar = False
+        for a_vec, a_text in zip(asked_vecs, asked_questions):
+            if _cosine(q_vec, a_vec) >= threshold:
+                print(f"  [dedup] dropped near-duplicate "
+                      f"(cos≥{threshold}): {q_text!r}  vs  {a_text!r}")
+                too_similar = True
+                break
+        if not too_similar:
+            kept.append(q)
+    return kept
 
 
 def rank_questions(
@@ -290,15 +435,40 @@ def rank_questions(
     belief_updater: BeliefUpdaterV3,
     top_k: int = 5,
     polar: bool = False,
+    asked_questions: list[str] | None = None,
 ) -> list[dict]:
     """
     Annotate each candidate question with measured EIG and per-branch
     detail, sorted by EIG descending.
 
+    If `asked_questions` is provided, near-paraphrases of previously
+    asked questions are dropped BEFORE EIG ranking — see
+    `_drop_paraphrases_of_asked`.
+
     Each returned dict has the original question fields plus:
       - "measured_eig": float, in bits
       - "branches":     list of per-recipe simulation results
     """
+    # Dedup the candidate pool against previously-asked questions. If
+    # dedup leaves NOTHING, fall back to the original pool so the gate
+    # can still find a question to ask. The orchestrator was previously
+    # refusing to ask in late windows because dedup zeroed every
+    # candidate — but the situation called for asking (top P ≈ 0.30,
+    # entropy > 1.5). Better to ask a slight rewording of an earlier
+    # question than to ask nothing at all.
+    if asked_questions:
+        original = questions
+        deduped = _drop_paraphrases_of_asked(
+            questions, asked_questions, belief_updater,
+        )
+        if deduped:
+            questions = deduped
+        else:
+            print("  [dedup] all candidates were near-duplicates of prior "
+                  "asks; falling back to un-deduped pool so the gate has "
+                  "something to score.")
+            questions = original
+
     ranked = []
     for q in questions:
         eig, branches = expected_information_gain(
@@ -326,6 +496,7 @@ def should_ask(
     max_questions: int = 2,
     top_k: int = 5,
     polar: bool = False,
+    asked_questions: list[str] | None = None,
 ) -> tuple[bool, dict | None, list[dict]]:
     """
     Combined gate. Ask iff *all three* hold:
@@ -333,6 +504,10 @@ def should_ask(
       (a) budget not burnt:   questions_asked < max_questions
       (b) uncertainty high:   H(belief) > entropy_threshold
       (c) useful Q exists:    max measured EIG > eig_threshold
+
+    `asked_questions` is the list of question texts already fired this
+    session. When provided, near-paraphrases are dropped BEFORE the EIG
+    ranking so we never gate on a duplicate.
 
     Returns (should_ask, best_question_or_None, all_ranked).
     `all_ranked` is returned even when we choose not to ask so the caller
@@ -344,7 +519,10 @@ def should_ask(
     if belief_updater.entropy() < entropy_threshold:
         return False, None, []  # already confident — don't bother the cook
 
-    ranked = rank_questions(questions, belief_updater, top_k, polar=polar)
+    ranked = rank_questions(
+        questions, belief_updater, top_k,
+        polar=polar, asked_questions=asked_questions,
+    )
     if not ranked or ranked[0]["measured_eig"] < eig_threshold:
         # Nothing on offer would help. Better to wait for more observations.
         return False, None, ranked

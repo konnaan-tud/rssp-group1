@@ -188,6 +188,107 @@ def get_raw_human_answer(
 
 
 # ─────────────────────────────────────────────────────────────────────────
+# Observation-clarification mode
+#
+# When the VLM produces an observation that doesn't match any recipe
+# scene closely (max cosine below OBSERVATION_RECOGNITION_THRESHOLD), the
+# observation provides no useful belief signal and may actively disperse
+# the contrastive softmax distribution. Rather than feed garbage into
+# bu.update(), we ask the cook to describe what step they were doing,
+# and use that clarified sentence as the observation.
+#
+# This is NOT counted as a wh/polar experimental question — it's an
+# observation-fixing step that runs identically in both conditions, so
+# it doesn't bias the wh-vs-polar comparison. Only runs in --answer-mode
+# text (the stub has no way to clarify).
+# ─────────────────────────────────────────────────────────────────────────
+
+OBSERVATION_RECOGNITION_THRESHOLD = 0.55
+
+
+def maybe_clarify_observation(
+    observation: str,
+    bu: BeliefUpdaterV3,
+    answer_mode: str,
+    threshold: float = OBSERVATION_RECOGNITION_THRESHOLD,
+) -> tuple[str, dict | None]:
+    """
+    Wh-form observation clarifier. Returns (vlm_sentence, clar_meta):
+      - vlm_sentence is ALWAYS the original VLM observation (the
+        orchestrator updates the belief with this first).
+      - clar_meta is None when no clarification was asked, or a dict
+        with the question metadata for logging + mutual exclusion:
+          fired           : True
+          confirmed       : True if the cook's answer normalised to a
+                            recipe-style sentence
+          question        : the wh-question we asked
+          proposition     : the system's best-guess scene (for context)
+          raw_answer      : the cook's literal typed text
+          incorporate_as_answer : the recipe-form sentence to feed
+                            to bu.incorporate_answer when confirmed;
+                            None otherwise
+          answer_type     : one of
+                            "wh_clarification_confirmed"
+                            "wh_clarification_skipped"
+                            "wh_clarification_off_topic"
+    """
+    if answer_mode != "text" or not observation:
+        return observation, None  # stub mode: no human available
+
+    best_scene, best_cos = bu.best_recipe_scene_match(observation)
+    if best_cos >= threshold:
+        return observation, None  # recognised; nothing to clarify
+
+    # We have an unrecognised observation. Ask the cook to describe.
+    question_text = "Could you describe what step you were doing?"
+    print(f"  [clarify] VLM observation matched no recipe scene closely "
+          f"(best cos {best_cos:.3f} < {threshold}).")
+    print(f"  [clarify] VLM said : {observation!r}")
+    if best_scene:
+        print(f"  [clarify] Best guess: {best_scene!r}")
+    print(f"  [clarify] {question_text} (or 'skip' to keep VLM observation)")
+    try:
+        raw = input("  your description : ").strip()
+    except EOFError:
+        raw = ""
+
+    if not raw or raw.lower() == "skip":
+        print("  [clarify] keeping original VLM observation.")
+        return observation, {
+            "fired": True, "confirmed": False,
+            "question": question_text,
+            "proposition": best_scene or "",
+            "raw_answer": raw,
+            "incorporate_as_answer": None,
+            "answer_type": "wh_clarification_skipped",
+        }
+
+    outcome = normalize_answer(raw, belief_updater=bu)
+    if outcome.type == AnswerType.AFFIRMATIVE and outcome.recipe_sentence:
+        print(f"  [clarify] using clarified observation: "
+              f"{outcome.recipe_sentence}")
+        return observation, {
+            "fired": True, "confirmed": True,
+            "question": question_text,
+            "proposition": best_scene or "",
+            "raw_answer": raw,
+            "incorporate_as_answer": outcome.recipe_sentence,
+            "answer_type": "wh_clarification_confirmed",
+        }
+
+    print(f"  [clarify] couldn't normalise '{raw}' to a recipe-style "
+          f"sentence ({outcome.type.value}); keeping original.")
+    return observation, {
+        "fired": True, "confirmed": False,
+        "question": question_text,
+        "proposition": best_scene or "",
+        "raw_answer": raw,
+        "incorporate_as_answer": None,
+        "answer_type": "wh_clarification_off_topic",
+    }
+
+
+# ─────────────────────────────────────────────────────────────────────────
 # Hyperparameters
 # ─────────────────────────────────────────────────────────────────────────
 
@@ -413,7 +514,9 @@ def main(answer_mode: str = "stub", recipe: str = "carbonara"):
             print("  [warn] VLM returned empty observation; skipping update.")
             continue
 
-        # 2. Observation update — apply to BOTH the real and shadow updaters.
+        # 2. Observation update — apply to BOTH the real and shadow updaters
+        # with the ORIGINAL VLM observation. Clarification (if any) runs as
+        # a separate incorporate_answer step below.
         entropy_before_obs = bu.entropy()
         shadow_entropy_before_obs = bu_obs_only.entropy()
 
@@ -435,10 +538,9 @@ def main(answer_mode: str = "stub", recipe: str = "carbonara"):
         print(f"  top     : {top} ({p:.3f})")
 
         # 2b. If a question fired in the PREVIOUS window, close out its
-        # redundancy now. Redundancy = how much information the next
-        # observation would have delivered WITHOUT the question, minus how
-        # much it actually delivered WITH the question already incorporated.
-        # Unique question contribution = IG_Q − redundancy.
+        # redundancy now. Same logic applies to both discrimination and
+        # clarification questions — the shadow vs real IG_obs gap is the
+        # redundancy.
         if pending_question is not None:
             redundancy = shadow_ig_obs - real_ig_obs
             unique_value = pending_question["ig_q"] - redundancy
@@ -460,6 +562,66 @@ def main(answer_mode: str = "stub", recipe: str = "carbonara"):
                   f"unique value={unique_value:+.3f}")
             question_log.append(pending_question)
             pending_question = None
+
+        # 2c. Observation clarification (text mode only). Asked AFTER the
+        # observation update so the cook's confirmation runs through
+        # incorporate_answer and produces a clean IG_Q. If clarification
+        # fires (regardless of cook's answer), we skip the discrimination
+        # question pipeline for this window — mutual exclusion: one
+        # question per window max.
+        _vlm_sentence, clar_meta = maybe_clarify_observation(
+            sentence, bu, answer_mode,
+        )
+        if clar_meta is not None:
+            asked_questions.append(clar_meta["question"])
+            if clar_meta["confirmed"] and clar_meta["incorporate_as_answer"]:
+                h_before_clarif = bu.entropy()
+                bu.incorporate_answer(clar_meta["incorporate_as_answer"])
+                h_after_clarif = bu.entropy()
+                ig_q_clarif = h_before_clarif - h_after_clarif
+                snapshot(
+                    step_num=i, event_type="answer_clarification",
+                    text=clar_meta["incorporate_as_answer"],
+                    entropy_before=h_before_clarif,
+                )
+                print(f"  [clarify] realised IG_Q : {ig_q_clarif:+.4f} bits")
+            else:
+                ig_q_clarif = 0.0
+                snapshot(
+                    step_num=i, event_type="answer_clarification_skipped",
+                    text=f"[{clar_meta['answer_type']}] {clar_meta['raw_answer']}",
+                    entropy_before=bu.entropy(),
+                )
+                print(f"  [clarify] skipped: {clar_meta['answer_type']}; "
+                      f"no belief update.")
+
+            logger.log_question(
+                window=i, question=clar_meta["question"],
+                category="clarification",
+                answer=clar_meta["incorporate_as_answer"] or clar_meta["raw_answer"],
+                answer_type=clar_meta["answer_type"],
+                predicted_eig=0.0,
+                realised_ig_q=ig_q_clarif,
+            )
+            # Mark as pending so the next observation closes out its redundancy
+            pending_question = {
+                "window": i,
+                "question": clar_meta["question"],
+                "category": "clarification",
+                "answer": clar_meta["incorporate_as_answer"] or clar_meta["raw_answer"],
+                "answer_type": clar_meta["answer_type"],
+                "predicted_eig": 0.0,
+                "ig_q": round(ig_q_clarif, 4),
+                "next_obs_window": None,
+                "real_ig_next_obs": None,
+                "shadow_ig_next_obs": None,
+                "redundancy": None,
+                "unique_value": round(ig_q_clarif, 4),
+                "negated_entity": "",
+            }
+            questions_asked += 1
+            # MUTUAL EXCLUSION: skip discrimination pipeline this window.
+            continue
 
         # 2. CHEAP gate first — skip the VLM call when the answer is already
         # obvious. Budget gate is disabled for now (uncomment to restore).
