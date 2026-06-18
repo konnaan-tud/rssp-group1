@@ -1,0 +1,9 @@
+session_id,condition,timestamp,duration_s,ground_truth,predicted,accuracy,final_prob,final_entropy,questions_asked,n_windows,n_recipes,total_ig_obs,total_ig_q,total_unique_value,mean_ig_obs,mean_ig_q,n_yes,n_no,n_question_skipped,notes
+20260618_144129_wh,wh,2026-06-18T14:44:22,172.7,carbonara,carbonara,1,0.4321,2.6557,2,9,29,0.8553,1.3468,-0.3354,0.095,0.6734,0,0,7,
+20260618_144538_wh,wh,2026-06-18T14:50:15,277.4,carbonara,carbonara,1,0.5941,2.1641,2,9,29,1.4573,1.2365,0.5054,0.1619,0.6182,0,0,5,
+20260618_145405_polar,polar,2026-06-18T14:55:38,93.2,carbonara,carbonara bianca,0,0.4693,1.6752,2,9,29,0.6188,2.5639,3.3165,0.0688,1.2819,1,1,2,
+20260618_145646_wh,wh,2026-06-18T15:00:01,195.1,carbonara,carbonara,1,0.4677,2.5346,2,9,29,0.4495,1.8738,-0.1228,0.0499,0.9369,0,0,7,
+20260618_150628_polar,polar,2026-06-18T15:13:02,393.8,carbonara,carbonara,1,0.5433,1.7129,1,9,29,0.6882,2.4568,3.1318,0.0765,0.8189,0,1,1,
+20260618_154530_obs_only,obs_only,2026-06-18T15:46:05,35.3,pesto pasta,puttanesca pasta,0,0.1033,4.4524,0,5,29,0.4054,0,0,0.0811,,0,0,0,
+20260618_155232_wh,wh,2026-06-18T15:56:06,213.3,pesto pasta,puttanesca pasta,0,0.1033,4.4524,0,5,29,0.4054,0.0,0,0.0811,0.0,0,0,4,
+20260618_160006_polar,polar,2026-06-18T16:04:29,262.6,pesto pasta,pesto pasta,1,0.9638,0.2362,4,5,29,0.5754,4.0462,4.2161,0.1151,1.0115,2,2,0,

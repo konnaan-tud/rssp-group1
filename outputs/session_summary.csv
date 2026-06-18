@@ -1,2 +1,9 @@
-timestamp,condition,ground_truth,predicted,accuracy,predicted_prob,final_entropy,questions_asked,n_recipes,n_windows,total_ig_q,total_unique_value
-2026-06-17T20:39:30,obs_only,carbonara,carbonara,1,0.5343,2.3717,0,29,9,0.0,0.0
+timestamp,ground_truth,predicted,accuracy,predicted_prob,final_entropy,questions_asked,n_recipes,n_windows,total_ig_q,total_unique_value
+2026-06-18T14:44:22,carbonara,carbonara,1,0.4321,2.6557,2,29,9,1.3468,-0.3354
+2026-06-18T14:50:15,carbonara,carbonara,1,0.5941,2.1641,2,29,9,1.2365,0.5054
+2026-06-18T14:55:38,polar,carbonara,carbonara bianca,0,0.4693,1.6752,2,29,9,2.5639,3.3165
+2026-06-18T15:00:01,carbonara,carbonara,1,0.4677,2.5346,2,29,9,1.8738,-0.1228
+2026-06-18T15:13:02,polar,carbonara,carbonara,1,0.5433,1.7129,1,29,9,2.4568,3.1318
+2026-06-18T15:46:05,obs_only,pesto pasta,puttanesca pasta,0,0.1033,4.4524,0,29,5,0.0,0.0
+2026-06-18T15:56:06,pesto pasta,puttanesca pasta,0,0.1033,4.4524,0,29,5,0,0
+2026-06-18T16:04:29,polar,pesto pasta,pesto pasta,1,0.9638,0.2362,4,29,5,4.0462,4.2161

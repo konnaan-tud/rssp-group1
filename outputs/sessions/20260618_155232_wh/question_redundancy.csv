@@ -1,0 +1,2 @@
+window,question,category,answer,answer_type,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value,negated_entity
+4,How are you preparing the garlic?,method,,dont_know,0.1275,0.0,,,,,0.0,

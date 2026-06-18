@@ -1,0 +1,3 @@
+window,question,category,answer,answer_type,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value,negated_entity
+2,Which ingredient are you adding next?,ingredient,A cook grates pecorino into the mixing bowl.,affirmative,0.6142,1.1765,3,0.0353,1.1727,1.1374,0.0391,
+3,When do you add the pasta?,sequence,A cook pours first the egg mixture over the pasta.,affirmative,0.5967,0.6973,4,-0.4267,0.4325,0.8592,-0.1619,

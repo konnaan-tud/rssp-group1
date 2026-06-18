@@ -1,0 +1,5 @@
+window,question,question_form,answer_type,proposition,category,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value
+1,Are you adding cream next?,polar,no,A cook pours cream into the skillet.,ingredient,0.4163,2.4568,2,0.019,-0.025,-0.044,2.5008
+2,Are you whisking the eggs rather than scrambling them?,polar,no,A cook whisks the eggs in the mixing bowl.,method,0.8015,-2.0948,3,0.4411,0.4032,-0.0378,-2.057
+3,Are you adding pine nuts next?,polar,yes,A cook toasts pine nuts in a dry pan.,ingredient,0.8302,1.666,4,-0.1279,-0.3887,-0.2608,1.9268
+4,Are you adding pine nuts next?,polar,yes,A cook adds pine nuts to the mixing bowl.,ingredient,1.5414,2.0182,5,-0.0334,0.1393,0.1727,1.8455
