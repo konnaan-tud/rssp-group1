@@ -50,7 +50,7 @@ RECIPE_SCENES_PATH = os.path.join("data", "italian_recipe_scenes.json")
 # a recipe's raw hybrid similarity (before the contrastive mean) in
 # proportion to how strongly that recipe's near-future matches the negated
 # proposition. Tuned once against the carbonara clips, then frozen.
-NEGATION_PENALTY = 0.5
+NEGATION_PENALTY = 0.25
 NEGATION_MATCH_THRESHOLD = 0.5   # cosine below this = recipe unaffected by the "no"
 
 
