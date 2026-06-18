@@ -67,10 +67,10 @@ def run_cluster(cluster_count: int | None) -> None:
     print(f"Similarity curve  → {result['curve_png']}")
 
 
-def run_vlm(answer_mode: str) -> None:
+def run_vlm(answer_mode: str, recipe: str) -> None:
     """Run the VLM orchestrator end-to-end."""
     from orchestrator_v2_vlm import main as _main
-    _main(answer_mode=answer_mode)
+    _main(answer_mode=answer_mode, recipe=recipe)
 
 
 def parse_args() -> argparse.Namespace:
@@ -105,6 +105,14 @@ def parse_args() -> argparse.Namespace:
             "Default: pick automatically by silhouette score."
         ),
     )
+    parser.add_argument(
+        "--recipe",
+        default="carbonara",
+        help=(
+            "Dish to run for --mode vlm. Clips live in data/clips/<recipe>/. "
+            "Default: carbonara."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -117,7 +125,7 @@ def main() -> None:
     elif args.mode == "test":
         run_test()
     elif args.mode == "vlm":
-        run_vlm(args.answer_mode)
+        run_vlm(args.answer_mode, args.recipe)
 
 
 if __name__ == "__main__":

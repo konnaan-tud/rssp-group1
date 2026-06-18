@@ -14,6 +14,7 @@ Main entry point:
 from .answer_normalizer import (
     AnswerOutcome,
     AnswerType,
+    classify_polar_answer,
     normalize_answer,
     to_recipe_sentence,
 )
@@ -21,6 +22,7 @@ from .answer_normalizer import (
 __all__ = [
     "AnswerOutcome",
     "AnswerType",
+    "classify_polar_answer",
     "normalize_answer",
     "to_recipe_sentence",
 ]

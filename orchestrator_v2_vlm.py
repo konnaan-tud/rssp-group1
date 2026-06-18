@@ -54,6 +54,7 @@ from dialogue.answer_normalizer import (
     normalize_answer,
 )
 from utils.session_logger import SessionLogger
+from utils.clip_loader import available_recipes, discover_clips
 
 # ─────────────────────────────────────────────────────────────────────────
 # Observation trajectory — carbonara session (REAL VIDEO).
@@ -63,19 +64,12 @@ from utils.session_logger import SessionLogger
 #     python scripts/prepare_clips.py
 # ─────────────────────────────────────────────────────────────────────────
 
-CLIPS_DIR = Path("data/clips")
-
-WINDOWS = [
-    CLIPS_DIR / "01_pour_water.mp4",
-    CLIPS_DIR / "02_crack_egg.mp4",
-    CLIPS_DIR / "03_grating_pecorino.mp4",
-    CLIPS_DIR / "04_chopping_pancetta.mp4",
-    CLIPS_DIR / "05_cooking_pancetta.mp4",
-    CLIPS_DIR / "06_boil_pasta.mp4",
-    CLIPS_DIR / "07_drain_pasta.mp4",
-    CLIPS_DIR / "08_pasta_into_skillet.mp4",
-    CLIPS_DIR / "09_stirring_carbonara.mp4",
-]
+# Clips and ground-truth are no longer hardcoded — they are discovered at
+# `main()` call time from `data/clips/<recipe>/` via `discover_clips`.
+# Override with `--recipe pesto` (or any other folder name under
+# data/clips/). The default recipe is "carbonara" because that's what
+# all the test fixtures and figure captions assume.
+DEFAULT_RECIPE = "carbonara"
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -97,8 +91,6 @@ WINDOWS = [
 # human) or audio capture.
 # ─────────────────────────────────────────────────────────────────────────
 
-GROUND_TRUTH = "carbonara"
-
 # Minimum cosine between the question and the simulated scene for the human
 # stub to actually answer with that scene. If below this, the cook says
 # "doesn't apply yet" — preventing false IG_Q signals from questions whose
@@ -109,7 +101,11 @@ HUMAN_STUB_NOT_AT_STEP = (
 )
 
 
-def pick_human_answer(question_text: str, bu: BeliefUpdaterV3) -> str:
+def pick_human_answer(
+    question_text: str,
+    bu: BeliefUpdaterV3,
+    ground_truth: str,
+) -> str:
     """
     Stub "human" for the carbonara session. Returns the raw string the
     cook would say; downstream normalisation runs through `normalize_answer`
@@ -139,7 +135,7 @@ def pick_human_answer(question_text: str, bu: BeliefUpdaterV3) -> str:
     # is actually relevant to the question.
     from questioning.questioning_planner import NEAR_FUTURE_WINDOW, _cosine
 
-    near = bu.unseen_recipe_scenes(GROUND_TRUTH)[:NEAR_FUTURE_WINDOW]
+    near = bu.unseen_recipe_scenes(ground_truth)[:NEAR_FUTURE_WINDOW]
     if not near:
         return HUMAN_STUB_NOT_AT_STEP
 
@@ -178,11 +174,12 @@ def get_raw_human_answer(
     question_text: str,
     bu: BeliefUpdaterV3,
     answer_mode: str,
+    ground_truth: str,
 ) -> str:
     """Dispatch to the configured human-answer source."""
     if answer_mode == "text":
         return prompt_text_answer(question_text)
-    return pick_human_answer(question_text, bu)
+    return pick_human_answer(question_text, bu, ground_truth)
 
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -300,7 +297,20 @@ def generate_vlm_questions(
 # Main loop
 # ─────────────────────────────────────────────────────────────────────────
 
-def main(answer_mode: str = "stub"):
+def main(answer_mode: str = "stub", recipe: str = "carbonara"):
+    # 0. Resolve clips + ground truth for this dish. Replaces the hardcoded
+    #    WINDOWS list — orchestrator now runs any recipe whose clips are
+    #    organised under data/clips/<recipe>/.
+    try:
+        windows_list, ground_truth = discover_clips(recipe)
+    except (FileNotFoundError, ValueError) as e:
+        print(f"[clips] {e}", file=sys.stderr)
+        return
+    WINDOWS = windows_list
+    GROUND_TRUTH = ground_truth
+    print(f"[session] recipe={recipe!r}  ground_truth={GROUND_TRUTH!r}  "
+          f"{len(WINDOWS)} clips")
+
     # 1. Sanity check: every clip must exist before we waste 30s on model load.
     missing = [p for p in WINDOWS if not p.exists()]
     if missing:
@@ -484,7 +494,9 @@ def main(answer_mode: str = "stub"):
         # carbonara cook; the text path prompts the terminal. Both
         # produce a raw string that the normaliser classifies.
         raw_answer = get_raw_human_answer(
-            best_q["question"], bu, answer_mode=answer_mode,
+            best_q["question"], bu,
+            answer_mode=answer_mode,
+            ground_truth=GROUND_TRUTH,
         )
         outcome: AnswerOutcome = normalize_answer(raw_answer, belief_updater=bu)
 
@@ -497,15 +509,53 @@ def main(answer_mode: str = "stub"):
         print(f"     predicted EIG : {best_q['measured_eig']:+.4f} bits")
 
         # Route on the outcome's type. Three branches:
-        #   - DOESNT_APPLY / DONT_KNOW / OFF_TOPIC → skip silently
+        #   - DOESNT_APPLY / DONT_KNOW / OFF_TOPIC → log + skip belief update
         #   - NEGATIVE                              → log + skip (V3 can't
         #                                              represent negation
         #                                              reliably; documented
         #                                              limitation)
         #   - AFFIRMATIVE                           → incorporate + log IG_Q
+        #
+        # In every "skip" branch we still SNAPSHOT and LOG the question so
+        # the entropy plot shows the asked-but-unactionable event and the
+        # redundancy plot shows a zero-IG bar. The question was asked —
+        # the plots should reflect that, even when no belief update fired.
         if outcome.skip_update:
             print(f"     [skip] {outcome.type.value} — NO belief update, "
                   f"no IG_Q recorded.")
+            # Mark an "answer_skipped" event on the entropy trace so the
+            # plot can show *we asked but learned nothing*. The belief
+            # didn't change, so entropy_before == entropy_after and the
+            # ig column will be 0.
+            snapshot(
+                step_num=i, event_type="answer_skipped",
+                text=f"[{outcome.type.value}] {raw_answer}",
+                entropy_before=bu.entropy(),
+            )
+            # Append a zero-IG row to the redundancy log so the bar shows.
+            question_log.append({
+                "window": i,
+                "question": best_q["question"],
+                "category": best_q.get("category", "unspecified"),
+                "answer": raw_answer,
+                "answer_type": outcome.type.value,
+                "predicted_eig": round(best_q["measured_eig"], 4),
+                "ig_q": 0.0,
+                "next_obs_window": None,
+                "real_ig_next_obs": None,
+                "shadow_ig_next_obs": None,
+                "redundancy": None,
+                "unique_value": 0.0,
+                "negated_entity": "",
+            })
+            # Mirror to SessionLogger so the session JSON has a row too.
+            logger.log_question(
+                window=i, question=best_q["question"],
+                category=best_q.get("category", ""),
+                answer=raw_answer, answer_type=outcome.type.value,
+                predicted_eig=best_q["measured_eig"],
+                realised_ig_q=0.0,
+            )
             continue
 
         if outcome.type == AnswerType.NEGATIVE:
@@ -514,8 +564,11 @@ def main(answer_mode: str = "stub"):
             print(f"     [skip] NEGATIVE answer{note} — NO belief update. "
                   f"V3's embedder does not represent negation reliably; "
                   f"recording as a missed-opportunity question.")
-            # Still log the question so the redundancy CSV has a row
-            # describing why no IG_Q was recorded.
+            snapshot(
+                step_num=i, event_type="answer_skipped",
+                text=f"[negative] {raw_answer}",
+                entropy_before=bu.entropy(),
+            )
             question_log.append({
                 "window": i,
                 "question": best_q["question"],
@@ -531,6 +584,13 @@ def main(answer_mode: str = "stub"):
                 "unique_value": 0.0,
                 "negated_entity": negated or "",
             })
+            logger.log_question(
+                window=i, question=best_q["question"],
+                category=best_q.get("category", ""),
+                answer=raw_answer, answer_type=outcome.type.value,
+                predicted_eig=best_q["measured_eig"],
+                realised_ig_q=0.0,
+            )
             continue
 
         # AFFIRMATIVE path — actually update the belief.
@@ -548,7 +608,7 @@ def main(answer_mode: str = "stub"):
         logger.log_question(
             window=i, question=best_q["question"],
             category=best_q.get("category", ""),
-            answer=answer, answer_type="wh",
+            answer=answer_sentence, answer_type="wh",
             predicted_eig=best_q["measured_eig"],
             realised_ig_q=realised,
         )
@@ -603,8 +663,13 @@ def main(answer_mode: str = "stub"):
         question_log.append(pending_question)
 
     # Write per-step belief history + per-question redundancy log to CSVs.
-    outputs_dir = Path("outputs")
-    outputs_dir.mkdir(exist_ok=True)
+    # Per-session artefacts go into the SessionLogger's session_dir so runs
+    # don't overwrite each other; cross-session tables (runs_log, summary)
+    # stay at the top-level outputs/ folder.
+    outputs_root = Path("outputs")
+    outputs_root.mkdir(exist_ok=True)
+    outputs_dir = logger.session_dir
+    outputs_dir.mkdir(parents=True, exist_ok=True)
 
     import csv as _csv
     if history_rows:
@@ -625,10 +690,13 @@ def main(answer_mode: str = "stub"):
             writer.writerows(question_log)
         print(f"Wrote question redundancy → {q_csv}")
 
-    # Append a one-row summary to session_summary.csv. Lets the supervisor
-    # aggregate accuracy across many sessions for the wh-vs-polar experiment.
+    # Append a one-row summary to session_summary.csv at the TOP-LEVEL
+    # outputs/ — this is a cross-session table, append-only, and must
+    # stay outside the per-session directory so the supervisor can
+    # aggregate accuracy across many sessions for the wh-vs-polar
+    # experiment.
     import datetime as _dt
-    summary_csv = outputs_dir / "session_summary.csv"
+    summary_csv = outputs_root / "session_summary.csv"
     summary_row = {
         "timestamp": _dt.datetime.now().isoformat(timespec="seconds"),
         "ground_truth": GROUND_TRUTH,
@@ -655,7 +723,7 @@ def main(answer_mode: str = "stub"):
         writer.writerow(summary_row)
     print(f"Appended session summary → {summary_csv}")
 
-    print("\nPlot with: python scripts/plot_belief.py")
+    print(f"\nPlot with: python scripts/plot_belief.py --session-dir {outputs_dir}")
     logger.save(
         predicted=top, accuracy=accuracy, final_prob=p,
         final_entropy=bu.entropy(), questions_asked=questions_asked,
@@ -676,9 +744,23 @@ def parse_args() -> argparse.Namespace:
             "simulator; 'text' prompts for a typed answer in the terminal."
         ),
     )
+    recipes = available_recipes() or ["carbonara"]
+    parser.add_argument(
+        "--recipe",
+        choices=recipes,
+        default="carbonara" if "carbonara" in recipes else recipes[0],
+        help=(
+            "Dish to run. Clips live in data/clips/<recipe>/. "
+            f"Detected recipes: {', '.join(recipes)}. "
+            "Add a new dish: drop ordered .mp4 files in "
+            "data/clips/<name>/ and add an entry to "
+            "utils/clip_loader._GROUND_TRUTH_ALIASES if the folder name "
+            "differs from the recipe name in italian_recipe_scenes.json."
+        ),
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    main(answer_mode=args.answer_mode)
+    main(answer_mode=args.answer_mode, recipe=args.recipe)

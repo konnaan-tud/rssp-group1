@@ -306,6 +306,7 @@ _DONT_KNOW_PATTERNS = [
     re.compile(r"\bno idea\b", re.IGNORECASE),
     re.compile(r"\bnot sure\b", re.IGNORECASE),
     re.compile(r"\bunclear\b", re.IGNORECASE),
+    re.compile(r"^\s*skip\s*$", re.IGNORECASE),
     re.compile(r"^\?+$"),
 ]
 
@@ -364,6 +365,84 @@ def _extract_negated_entity(text: str) -> str | None:
             if entity in window:
                 return entity
     return None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Polar (yes/no) classification
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Patterns checked first — these take priority over the affirmative/negative
+# split below because "doesn't apply" answers can otherwise be misread as
+# "no" by the negation patterns.
+_POLAR_YES = re.compile(
+    r"^\s*(?:y|yes|yep|yeah|yup|sure|correct|right|true|aff|affirmative)\b[!.\s,]*",
+    re.IGNORECASE,
+)
+_POLAR_NO = re.compile(
+    r"^\s*(?:n|no|nope|nah|not\s+really|not\s+at\s+all|negative|wrong|incorrect|false|never)\b[!.\s,]*",
+    re.IGNORECASE,
+)
+
+
+def classify_polar_answer(raw_answer: str) -> AnswerOutcome:
+    """
+    Classify a typed yes/no answer for the polar condition.
+
+    Returns an `AnswerOutcome` with one of:
+      - AFFIRMATIVE  — recipe_sentence holds the literal "yes" token.
+      - NEGATIVE     — recipe_sentence holds the literal "no" token.
+      - DOESNT_APPLY — the cook hasn't reached this step.
+      - DONT_KNOW    — empty / "skip" / "don't know".
+      - OFF_TOPIC    — input couldn't be parsed as any of the above.
+
+    The orchestrator branches on `outcome.type`:
+      - AFFIRMATIVE → `bu.incorporate_answer(proposition)`
+      - NEGATIVE    → `bu.incorporate_negative_answer(proposition)`
+      - everything else → skip silently (no belief update, no IG_Q logged).
+
+    Symmetric with `normalize_answer` for the wh condition so both
+    orchestrators have a single shape for human-answer routing.
+    """
+    raw = (raw_answer or "").strip().strip('"').strip("'").strip()
+
+    if not raw:
+        return AnswerOutcome(type=AnswerType.DONT_KNOW, raw_text="")
+
+    # Pre-screen for the "I'm not at that step" and "I don't know" cases.
+    # These must come before the yes/no split because "I'm not at that step"
+    # starts with a word the _POLAR_NO pattern would otherwise catch.
+    for pat in _DOESNT_APPLY_PATTERNS:
+        if pat.search(raw):
+            return AnswerOutcome(type=AnswerType.DOESNT_APPLY, raw_text=raw)
+    for pat in _DONT_KNOW_PATTERNS:
+        if pat.search(raw):
+            return AnswerOutcome(type=AnswerType.DONT_KNOW, raw_text=raw)
+
+    if _POLAR_YES.match(raw):
+        return AnswerOutcome(
+            type=AnswerType.AFFIRMATIVE,
+            raw_text=raw,
+            recipe_sentence="yes",
+        )
+    if _POLAR_NO.match(raw):
+        return AnswerOutcome(
+            type=AnswerType.NEGATIVE,
+            raw_text=raw,
+            recipe_sentence="no",
+        )
+
+    # The cook typed a full sentence instead of yes/no. Best-effort: scan
+    # for any leading negation marker so e.g. "without cream" is read as
+    # NEGATIVE rather than off-topic.
+    leading_negation = _classify_answer_type(raw)
+    if leading_negation == AnswerType.NEGATIVE:
+        return AnswerOutcome(
+            type=AnswerType.NEGATIVE,
+            raw_text=raw,
+            recipe_sentence="no",
+        )
+
+    return AnswerOutcome(type=AnswerType.OFF_TOPIC, raw_text=raw)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

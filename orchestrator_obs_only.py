@@ -24,37 +24,38 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
+import argparse
+
 from probability.belief_updater_v3 import BeliefUpdaterV3
 from observation_pipeline.video_observer import load_qwen_vlm, describe_clip
 from utils.session_logger import SessionLogger
+from utils.clip_loader import available_recipes, discover_clips
 
 
 # ─────────────────────────────────────────────────────────────────────────
 # Observation trajectory
+#
+# WINDOWS and GROUND_TRUTH are no longer hardcoded — they're resolved at
+# main() call time from data/clips/<recipe>/ via discover_clips.
 # ─────────────────────────────────────────────────────────────────────────
-
-CLIPS_DIR = Path("data/clips")
-
-WINDOWS = [
-    CLIPS_DIR / "01_pour_water.mp4",
-    CLIPS_DIR / "02_crack_egg.mp4",
-    CLIPS_DIR / "03_grating_pecorino.mp4",
-    CLIPS_DIR / "04_chopping_pancetta.mp4",
-    CLIPS_DIR / "05_cooking_pancetta.mp4",
-    CLIPS_DIR / "06_boil_pasta.mp4",
-    CLIPS_DIR / "07_drain_pasta.mp4",
-    CLIPS_DIR / "08_pasta_into_skillet.mp4",
-    CLIPS_DIR / "09_stirring_carbonara.mp4",
-]
-
-GROUND_TRUTH = "carbonara"
 
 
 # ─────────────────────────────────────────────────────────────────────────
 # Main loop
 # ─────────────────────────────────────────────────────────────────────────
 
-def main():
+def main(recipe: str = "carbonara"):
+    # 0. Resolve clips + ground-truth label for this dish.
+    try:
+        windows_list, ground_truth = discover_clips(recipe)
+    except (FileNotFoundError, ValueError) as e:
+        print(f"[clips] {e}", file=sys.stderr)
+        return
+    WINDOWS = windows_list
+    GROUND_TRUTH = ground_truth
+    print(f"[session] recipe={recipe!r}  ground_truth={GROUND_TRUTH!r}  "
+          f"{len(WINDOWS)} clips")
+
     missing = [p for p in WINDOWS if not p.exists()]
     if missing:
         print("Missing clip files:")
@@ -136,12 +137,19 @@ def main():
     print(f"Total IG_obs     : {total_ig_obs:.4f} bits")
 
     # ── Write CSVs ────────────────────────────────────────────────────────
-    outputs_dir = Path("outputs")
-    outputs_dir.mkdir(exist_ok=True)
+    # Per-session belief_history.csv goes into the SessionLogger's
+    # session_dir; cross-session session_summary.csv stays at the top-level
+    # outputs/ so it accumulates across runs.
+    outputs_root = Path("outputs")
+    outputs_root.mkdir(exist_ok=True)
+    outputs_dir = logger.session_dir
+    outputs_dir.mkdir(parents=True, exist_ok=True)
 
     import csv as _csv
     if history_rows:
-        csv_path = outputs_dir / "belief_history_obs_only.csv"
+        # Same canonical filename across all three conditions — the session
+        # folder name (with the condition suffix) is what disambiguates.
+        csv_path = outputs_dir / "belief_history.csv"
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
             writer = _csv.DictWriter(f, fieldnames=list(history_rows[0].keys()))
             writer.writeheader()
@@ -149,7 +157,7 @@ def main():
         print(f"\nWrote belief history → {csv_path}")
 
     import datetime as _dt
-    summary_csv = outputs_dir / "session_summary.csv"
+    summary_csv = outputs_root / "session_summary.csv"
     summary_row = {
         "timestamp":      _dt.datetime.now().isoformat(timespec="seconds"),
         "condition":      "obs_only",
@@ -173,7 +181,7 @@ def main():
         writer.writerow(summary_row)
     print(f"Appended session summary → {summary_csv}")
 
-    print("\nPlot with: python scripts/plot_belief.py")
+    print(f"\nPlot with: python scripts/plot_belief.py --session-dir {outputs_dir}")
     logger.save(
         predicted=top, accuracy=accuracy, final_prob=p,
         final_entropy=bu.entropy(), questions_asked=0,
@@ -181,5 +189,23 @@ def main():
     )
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run the observations-only (no questioning) orchestrator."
+    )
+    recipes = available_recipes() or ["carbonara"]
+    parser.add_argument(
+        "--recipe",
+        choices=recipes,
+        default="carbonara" if "carbonara" in recipes else recipes[0],
+        help=(
+            "Dish to run. Clips live in data/clips/<recipe>/. "
+            f"Detected recipes: {', '.join(recipes)}."
+        ),
+    )
+    return parser.parse_args()
+
+
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(recipe=args.recipe)
