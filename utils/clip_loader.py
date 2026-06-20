@@ -4,146 +4,225 @@ utils/clip_loader.py
 Auto-discover the per-window video clips for an orchestrator session.
 
 All three orchestrators (obs_only, wh, polar) previously hardcoded their
-WINDOWS list to nine carbonara clips. To run a different recipe — pesto,
-amatriciana, anything else — you had to edit the orchestrator source.
-
-This module centralises that:
+WINDOWS list to one specific recipe. This module centralises clip
+discovery so the team can drop in any new recipe folder under
+`data/clips/<name>/` and the orchestrators pick it up via `--recipe <name>`
+— no code changes needed.
 
     >>> from utils.clip_loader import discover_clips
-    >>> clips, ground_truth = discover_clips("carbonara")
+    >>> clips, ground_truth = discover_clips("arrabbiata")
     >>> clips
-    [PosixPath('data/clips/carbonara/01_pour_water.mp4'), ...]
+    [PosixPath('data/clips/arrabbiata/01_pour_water.mp4'), ...]
+    >>> ground_truth
+    'arrabbiata pasta'
 
-Layout convention
------------------
-data/clips/<recipe_name>/<NN_step_label>.mp4
+═══════════════════════════════════════════════════════════════════════════
+FOLDER NAMING — three valid options
+═══════════════════════════════════════════════════════════════════════════
 
-Files are returned **sorted alphabetically** so the orchestrator iterates
-them in recipe order. We rely on the user numbering the clip files (e.g.
-`01_`, `02_`, ...) or naming them lexicographically (`video_01.mp4`,
-`video_02.mp4`, ...). Any file in the directory that isn't a video is
-ignored.
+1. EXACT recipe name (with spaces → underscores).
+       Recipe "carbonara bianca" → folder  data/clips/carbonara_bianca/
+       Recipe "cacio e pepe"     → folder  data/clips/cacio_e_pepe/
 
-The `ground_truth` returned is just the recipe name passed in — the
-orchestrators previously had a separate `GROUND_TRUTH = "carbonara"`
-constant for the human stub. With auto-discovery the two are the same
-string.
+2. PREFIX SHORTHAND — the unique recipe in italian_recipe_scenes.json
+   whose name starts with `<folder_name> ` will be resolved automatically.
+       Folder  data/clips/arrabbiata/  → recipe "arrabbiata pasta"
+       Folder  data/clips/pesto/       → recipe "pesto pasta"
+       Folder  data/clips/clam/        → recipe "clam pasta"
+       Folder  data/clips/carbonara/   → recipe "carbonara" (exact)
+
+3. MANIFEST FILE — drop a `recipe.txt` in the folder whose first line is
+   the canonical recipe name. Use this when the folder name is ambiguous
+   (e.g. "pea" matches both "pea pesto pasta" and "pea butter pasta") or
+   when you want a memorable short folder name.
+       data/clips/my_run/recipe.txt   →  "carbonara"
+
+═══════════════════════════════════════════════════════════════════════════
+CLIP FILE NAMING — sorted lexicographically
+═══════════════════════════════════════════════════════════════════════════
+
+The orchestrators iterate clips in alphabetical order, so use leading
+zeros to control the sequence:
+
+    01_pour_water.mp4
+    02_crack_egg.mp4
+    03_grate_pecorino.mp4
+    ...
+
+Supported extensions: .mp4, .mov, .mkv, .webm, .avi
+
+═══════════════════════════════════════════════════════════════════════════
+ADDING A NEW RECIPE THAT'S NOT IN THE JSON YET
+═══════════════════════════════════════════════════════════════════════════
+
+The belief updater only knows recipes that are listed in
+`data/italian_recipe_scenes.json` (and pre-embedded into
+`data/recipe_sequences.json`). If your test recipe isn't in there:
+
+    1. Add the recipe's ordered scenes to italian_recipe_scenes.json
+    2. Re-embed:  python main.py --mode bootstrap
+    3. Create your clip folder under data/clips/<name>/
+    4. Run:       python orchestrator_v2_vlm.py --recipe <name> --answer-mode text
+
+The clip_loader refuses to start a session if the resolved recipe name
+isn't found in italian_recipe_scenes.json — the error message names the
+available recipes so you can fix the folder name in one shot.
 """
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
+
+# ─────────────────────────────────────────────────────────────────────────
+# Configuration
+# ─────────────────────────────────────────────────────────────────────────
+
+DEFAULT_CLIPS_ROOT = Path("data/clips")
+DEFAULT_RECIPES_JSON = Path("data/italian_recipe_scenes.json")
 
 # File extensions we treat as video clips. Add more if you ever feed in
 # non-mp4 sources.
 VIDEO_EXTS = (".mp4", ".mov", ".mkv", ".webm", ".avi")
 
-# Where the recipe-specific subfolders live by convention. Override with
-# an absolute path if the user keeps clips elsewhere.
-DEFAULT_CLIPS_ROOT = Path("data/clips")
+# Optional per-folder manifest file. First line = canonical recipe name.
+# Used to override auto-resolution when the folder name is ambiguous.
+MANIFEST_FILENAME = "recipe.txt"
 
 
 # ─────────────────────────────────────────────────────────────────────────
-# Ground-truth aliases
-#
-# Some recipes in `data/italian_recipe_scenes.json` have multi-word names
-# ("pesto pasta") while the user's clip folder is a single short word
-# ("data/clips/pesto/"). The folder name is what the user types on the
-# command line (`--recipe pesto`) and what's easy to organise on disk.
-# The recipe name in the JSON is what `BeliefUpdaterV3` returns from
-# `bu.top_recipe()` and what the accuracy check compares against.
-#
-# This dict maps the CLI/folder name → the recipe-name string. The
-# entries below cover every dish that has a clip folder; add a new
-# entry whenever you add a new clip folder whose name doesn't match
-# the recipe label.
+# Recipe-name resolution
 # ─────────────────────────────────────────────────────────────────────────
 
-_GROUND_TRUTH_ALIASES: dict[str, str] = {
-    "carbonara": "carbonara",     # folder name == recipe name (no-op)
-    "pesto":     "pesto pasta",   # folder is short; recipe label is two words
-}
+def _load_recipe_names(recipes_path: Path = DEFAULT_RECIPES_JSON) -> list[str]:
+    """Return the list of recipe `dish` names from italian_recipe_scenes.json."""
+    if not recipes_path.exists():
+        return []
+    with open(recipes_path, encoding="utf-8") as f:
+        data = json.load(f)
+    return [r["dish"] for r in data]
 
+
+def _normalize_folder_name(folder_name: str) -> str:
+    """Convert underscores to spaces (folder convention → readable name)."""
+    return folder_name.replace("_", " ").strip()
+
+
+def _resolve_ground_truth(
+    folder_name: str,
+    folder_path: Path,
+    recipes_path: Path = DEFAULT_RECIPES_JSON,
+) -> str:
+    """
+    Resolve a clip-folder name to the canonical recipe name in
+    italian_recipe_scenes.json. Resolution order:
+
+      1. Manifest:    `<folder>/recipe.txt` first line, if present
+      2. Exact match: folder name (underscores→spaces) IS a recipe name
+      3. Prefix:      exactly one recipe starts with `<folder_name> `
+      4. Fail:        clear error listing available recipes
+
+    Raises ValueError when the folder cannot be resolved. The caller
+    should let the exception propagate up to main() — printing a useful
+    error is better than silently scoring against the wrong recipe.
+    """
+    available = _load_recipe_names(recipes_path)
+
+    # 1. Manifest override
+    manifest = folder_path / MANIFEST_FILENAME
+    if manifest.exists():
+        text = manifest.read_text(encoding="utf-8").strip()
+        if text:
+            recipe = text.splitlines()[0].strip()
+            if available and recipe not in available:
+                raise ValueError(
+                    f"{manifest} declares recipe {recipe!r}, but that "
+                    f"recipe is not in {recipes_path}. Available recipes: "
+                    f"{', '.join(sorted(available))}"
+                )
+            return recipe
+
+    normalized = _normalize_folder_name(folder_name)
+    if not available:
+        # JSON missing — degrade gracefully and use folder name as-is.
+        return normalized
+
+    # 2. Exact match
+    if normalized in available:
+        return normalized
+
+    # 3. Unique prefix match — recipe starts with "<folder_name> "
+    prefix_matches = [
+        r for r in available
+        if r == normalized or r.startswith(normalized + " ")
+    ]
+    if len(prefix_matches) == 1:
+        return prefix_matches[0]
+    if len(prefix_matches) > 1:
+        raise ValueError(
+            f"Folder name {folder_name!r} is ambiguous — matches multiple "
+            f"recipes: {', '.join(prefix_matches)}.\n"
+            f"Either rename the folder to be more specific (e.g. "
+            f"'{prefix_matches[0].replace(' ', '_')}'), or add a "
+            f"{MANIFEST_FILENAME} file in the folder containing the exact "
+            f"recipe name."
+        )
+
+    # 4. Nothing matched
+    raise ValueError(
+        f"Folder name {folder_name!r} does not match any recipe in "
+        f"{recipes_path}.\n"
+        f"Either rename the folder to match an existing recipe "
+        f"(e.g. 'arrabbiata' or 'cacio_e_pepe'), add a {MANIFEST_FILENAME} "
+        f"file in the folder with the exact recipe name, or add the recipe "
+        f"to italian_recipe_scenes.json and re-bootstrap.\n"
+        f"Available recipes: {', '.join(sorted(available))}"
+    )
+
+
+# ─────────────────────────────────────────────────────────────────────────
+# Public API
+# ─────────────────────────────────────────────────────────────────────────
 
 def discover_clips(
     recipe: str,
     clips_root: Path | str = DEFAULT_CLIPS_ROOT,
+    recipes_path: Path = DEFAULT_RECIPES_JSON,
 ) -> tuple[list[Path], str]:
     """
-    Return (sorted clip paths, ground-truth recipe name) for a recipe.
+    Return `(sorted clip paths, canonical recipe name)` for `recipe`.
 
-    Parameters
-    ----------
-    recipe
-        Recipe name. This is both the subfolder under `clips_root` and
-        the ground-truth label the orchestrator uses for the human stub
-        and the session summary. Whitespace and case are preserved
-        because `BeliefUpdaterV3` looks up recipes by their exact name in
-        `recipe_sequences.json`.
-    clips_root
-        Parent directory containing per-recipe subfolders. Defaults to
-        `data/clips`. Pass an absolute path if you keep clips elsewhere.
-
-    Raises
-    ------
-    FileNotFoundError
-        If `clips_root / recipe` doesn't exist or contains no recognised
-        video files. The error message names every searched path so the
-        user can fix the layout without digging.
+    `recipe` is the **folder name** under `clips_root` (NOT necessarily
+    the recipe name in the JSON — auto-resolution handles the mapping).
     """
     root = Path(clips_root)
     session_dir = root / recipe
 
     if not session_dir.is_dir():
-        # Help the user with a list of what IS available so they can fix
-        # the typo in one shot.
-        available = (
-            sorted(p.name for p in root.iterdir() if p.is_dir())
-            if root.exists() else []
-        )
+        available = available_recipes(root)
         hint = (
-            f"\nAvailable recipes in {root}/: " + ", ".join(available)
+            f"\nAvailable folders in {root}/: {', '.join(available)}"
             if available
             else f"\n{root} is empty or missing — "
                  f"build clips first with: python scripts/prepare_clips.py"
         )
         raise FileNotFoundError(
-            f"No clips directory for recipe {recipe!r} at {session_dir}.{hint}"
+            f"No clips folder for {recipe!r} at {session_dir}.{hint}"
         )
 
     clips = sorted(
         p for p in session_dir.iterdir()
         if p.suffix.lower() in VIDEO_EXTS
     )
-
     if not clips:
         raise FileNotFoundError(
-            f"Clips directory {session_dir} exists but contains no "
-            f"video files ({', '.join(VIDEO_EXTS)})."
+            f"Folder {session_dir} exists but contains no video files "
+            f"({', '.join(VIDEO_EXTS)})."
         )
 
-    # Translate the folder/CLI name to the recipe label in
-    # italian_recipe_scenes.json. If the user typed an unknown name we
-    # echo it back unchanged so the accuracy check fails loudly with the
-    # missing-recipe message instead of silently scoring against the
-    # wrong label.
-    ground_truth = _GROUND_TRUTH_ALIASES.get(recipe, recipe)
+    ground_truth = _resolve_ground_truth(recipe, session_dir, recipes_path)
     return clips, ground_truth
-
-
-def available_recipes(
-    clips_root: Path | str = DEFAULT_CLIPS_ROOT,
-) -> list[str]:
-    """
-    Recipe names that have a clip directory on disk. Used to populate
-    the `--recipe` argparse choices and to print a useful hint when the
-    user passes an unknown name.
-    """
-    root = Path(clips_root)
-    if not root.is_dir():
-        return []
-    return sorted(p.name for p in root.iterdir() if p.is_dir())
 
 
 def discover_clips_from_dir(
@@ -154,9 +233,8 @@ def discover_clips_from_dir(
     Alternative entry point: skip the `data/clips/<recipe>/` convention
     and point directly at an arbitrary directory of clips.
 
-    The ground-truth recipe name is taken from `ground_truth` if given,
-    otherwise it defaults to the directory's own name. Useful for ad-hoc
-    sessions where the clips live outside the repo.
+    `ground_truth` falls back to the directory's own name if not given.
+    Useful for ad-hoc sessions where the clips live outside the repo.
     """
     clips_dir = Path(clips_dir)
     if not clips_dir.is_dir():
@@ -172,3 +250,25 @@ def discover_clips_from_dir(
         )
 
     return clips, ground_truth or clips_dir.name
+
+
+def available_recipes(
+    clips_root: Path | str = DEFAULT_CLIPS_ROOT,
+) -> list[str]:
+    """
+    Folder names under `clips_root` that contain clip files. Used to
+    populate the `--recipe` argparse choices and to print a useful hint
+    when the user passes an unknown name.
+
+    Folders whose name starts with `_` or `.` are IGNORED — use this
+    convention to mark deprecated, backup, or work-in-progress folders
+    that you don't want appearing in the orchestrator's CLI choices.
+    Examples that get ignored:  `_old_pesto/`, `.scratch/`, `_backup/`
+    """
+    root = Path(clips_root)
+    if not root.is_dir():
+        return []
+    return sorted(
+        p.name for p in root.iterdir()
+        if p.is_dir() and not p.name.startswith(("_", "."))
+    )
