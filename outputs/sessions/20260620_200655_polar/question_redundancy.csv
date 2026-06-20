@@ -1,0 +1,5 @@
+window,question,question_form,answer_type,proposition,category,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value
+1,Are you adding cream to the skillet?,polar,yes,A cook pours cream into the skillet.,ingredient,0.4163,1.2495,2,-0.5275,0.6395,1.167,0.0825
+2,Is the next step adding frozen peas to the skillet?,polar,no,A cook adds frozen peas to the skillet.,sequence,0.825,1.072,3,0.1871,0.8694,0.6823,0.3897
+4,Will you chop onion on a cutting board?,polar,no,A cook chops onion on a cutting board.,method,0.4146,0.9682,5,0.0594,-0.1304,-0.1897,1.1579
+8,Will you grate lemon zest into a bowl?,polar,no,A cook grates lemon zest into a bowl.,method,0.2456,0.6164,9,0.1666,-0.0139,-0.1805,0.7969

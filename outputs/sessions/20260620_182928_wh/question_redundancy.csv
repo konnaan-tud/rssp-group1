@@ -1,0 +1,5 @@
+window,question,category,answer,answer_type,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value,negated_entity
+1,What's your next step after adding the butter?,sequence,doesn't apply,doesnt_apply,0.2019,0.0,,,,,0.0,
+2,What are you putting in the skillet?,ingredient,A cook puts olive oil in the skillet.,affirmative,0.3426,0.2994,3,0.1162,0.4838,0.3676,-0.0682,
+3,What's your next step after adding the chili flakes?,sequence,A cook stirs garlic in the skillet.,affirmative,0.2846,0.1536,4,0.0588,0.0844,0.0256,0.128,
+4,What's your next step after adding the spices?,sequence,A cook pours the tomato sauce.,affirmative,0.1345,0.246,5,-0.2498,0.0811,0.3309,-0.0849,

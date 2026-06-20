@@ -1,0 +1,7 @@
+window,question,question_form,answer_type,proposition,category,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value
+1,Are you adding cream to the skillet?,polar,yes,A cook pours cream into the skillet.,ingredient,0.4163,1.2495,2,-0.6192,0.6497,1.2689,-0.0194
+2,Is the next step to add mushrooms?,polar,no,A cook cooks mushrooms in the skillet.,sequence,0.2366,-0.0966,3,0.4666,0.5375,0.071,-0.1676
+3,Is the next step to add shrimp to the skillet?,polar,no,A cook adds shrimp to the skillet.,sequence,0.4613,0.1841,4,-0.0748,-0.0226,0.0522,0.1319
+4,Will you add chili flakes to the skillet?,polar,no,A cook crushes chili flakes into the skillet.,method,1.3763,0.3519,5,0.261,0.3485,0.0875,0.2644
+5,Are you adding onions to the skillet?,polar,yes,A cook sautees onion in the skillet.,ingredient,1.1836,1.4486,6,-0.059,-0.1326,-0.0736,1.5222
+8,Will you add vodka to the skillet?,polar,yes,A cook pours vodka into the skillet.,ingredient,0.2681,0.2728,9,-0.1525,-0.1502,0.0023,0.2705
