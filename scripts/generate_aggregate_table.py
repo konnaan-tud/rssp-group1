@@ -46,10 +46,11 @@ from generate_results_table import (
     UNIFORM_H,
     analyse_session,
     ROOT,
+    EVAL_DIR,
 )
 
-OUT_CSV = ROOT / "outputs" / "results_aggregate.csv"
-OUT_MD = ROOT / "outputs" / "results_aggregate.md"
+OUT_CSV = EVAL_DIR / "results_aggregate.csv"
+OUT_MD = EVAL_DIR / "results_aggregate.md"
 
 COLUMNS = [
     "condition",

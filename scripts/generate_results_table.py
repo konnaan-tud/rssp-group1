@@ -37,9 +37,10 @@ from pathlib import Path
 # ─────────────────────────────────────────────────────────────────────────
 
 ROOT = Path(__file__).resolve().parent.parent
-SESSIONS_DIR = ROOT / "outputs" / "sessions"
-OUT_CSV = ROOT / "outputs" / "results_per_recipe.csv"
-OUT_MD = ROOT / "outputs" / "results_per_recipe.md"
+# Evaluation sessions live under outputs/evaluation/<recipe>/<session_id>/.
+EVAL_DIR = ROOT / "outputs" / "evaluation"
+OUT_CSV = EVAL_DIR / "results_per_recipe.csv"
+OUT_MD = EVAL_DIR / "results_per_recipe.md"
 
 # Number of candidate recipes -> uniform prior entropy H(I_0) = log2(N).
 N_RECIPES = 29
@@ -104,9 +105,15 @@ UNIFORM_H = math.log2(N_RECIPES)
 
 def analyse_session(session_id: str, ground_truth: str) -> dict:
     """Load one session.json and compute the proposal's metrics for it."""
-    session_path = SESSIONS_DIR / session_id / "session.json"
-    if not session_path.exists():
-        raise FileNotFoundError(f"Missing session file: {session_path}")
+    # Sessions are nested one level deep under EVAL_DIR (per recipe), so
+    # locate the session folder by id regardless of which recipe folder
+    # it sits in.
+    matches = list(EVAL_DIR.glob(f"*/{session_id}/session.json"))
+    if not matches:
+        raise FileNotFoundError(
+            f"No session.json for {session_id!r} under {EVAL_DIR}"
+        )
+    session_path = matches[0]
 
     data = json.loads(session_path.read_text(encoding="utf-8"))
     result = data["result"]
