@@ -1,0 +1,5 @@
+| condition | n_sessions | accuracy | total_questions | pooled_mean_ig_q | sess_mean_ig_q | mean_ig_total | mean_final_entropy |
+|---|---|---|---|---|---|---|---|
+| obs_only | 6 | 5/6 | 0 | - | - | 1.257 | 3.601 |
+| wh | 6 | 5/6 | 13 | 0.377 | 0.367 | 1.438 | 3.42 |
+| polar | 6 | 4/6 | 33 | 0.467 | 0.534 | 3.162 | 1.696 |
