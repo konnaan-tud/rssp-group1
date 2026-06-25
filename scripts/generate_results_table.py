@@ -12,9 +12,17 @@ using exactly the metrics defined in the proposal (Section 3.3):
   - "Speed to correct"     first window where the true recipe became rank 1
   - Final rank of the true recipe
 
-It reads each session's `session.json` from outputs/sessions/<id>/ using the
-run -> session-id mapping below (taken from "RSSP Group 1.pdf"). Edit RUNS to
-add or swap sessions.
+It auto-discovers every session by scanning the folders under
+outputs/evaluation/<recipe>/<session_id>/.  The recipe comes from the
+<recipe> folder name and the condition from the <session_id> folder name
+(which ends in _obs_only / _wh / _polar), so there is no hardcoded
+run -> session-id mapping and no reliance on the (sometimes wrong) fields
+inside session.json: drop a session folder under outputs/evaluation/ and it
+is picked up automatically.
+
+The true recipe is resolved from the folder name against the candidate
+recipe list in each session's belief history, and correctness is computed as
+predicted == resolved recipe (the stored `accuracy` field is ignored).
 
 Outputs:
   outputs/results_per_recipe.csv   — one row per (recipe, condition)
@@ -30,6 +38,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+import re
 from pathlib import Path
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -45,41 +54,66 @@ OUT_MD = EVAL_DIR / "results_per_recipe.md"
 # Number of candidate recipes -> uniform prior entropy H(I_0) = log2(N).
 N_RECIPES = 29
 
-# recipe -> {condition: session_id}.  Edit this when you run more recipes.
-RUNS: dict[str, dict[str, str]] = {
-    "arrabbiata pasta": {
-        "obs_only": "20260620_182126_obs_only",
-        "wh":       "20260620_182928_wh",
-        "polar":    "20260620_185202_polar",
-    },
-    "vodka sauce pasta": {
-        "obs_only": "20260620_190720_obs_only",
-        "wh":       "20260620_190939_wh",
-        "polar":    "20260620_192006_polar",
-    },
-    "shrimp garlic pasta": {
-        "obs_only": "20260620_194850_obs_only",
-        "wh":       "20260620_195046_wh",
-        "polar":    "20260620_195613_polar",
-    },
-    "alfredo pasta": {
-        "obs_only": "20260620_200008_obs_only",
-        "wh":       "20260620_200254_wh",
-        "polar":    "20260620_200655_polar",
-    },
-    "amatriciana pasta": {
-        "obs_only": "20260620_200956_obs_only",
-        "wh":       "20260620_201155_wh",
-        "polar":    "20260620_201527_polar",
-    },
-    "clam pasta": {
-        "obs_only": "20260620_201904_obs_only",
-        "wh":       "20260620_202028_wh",
-        "polar":    "20260620_202447_polar",
-    },
-}
-
+# Longest condition tokens first so "obs_only" is matched before any short
+# substring could interfere.
 CONDITION_ORDER = ["obs_only", "wh", "polar"]
+
+# Generic words that carry no recipe identity, plus version suffixes like v2.
+_GENERIC_TOKENS = {"pasta", "sauce_dish"}
+
+
+def _tokens(name: str) -> set[str]:
+    """Lowercase word tokens of a name, dropping version suffixes (v2, v3...)."""
+    parts = name.lower().replace("-", "_").replace(" ", "_").split("_")
+    return {p for p in parts if p and not re.fullmatch(r"v\d+", p)}
+
+
+def _condition_from_name(session_folder: str) -> str | None:
+    """Parse obs_only / wh / polar out of a session folder name."""
+    for cond in CONDITION_ORDER:
+        if f"_{cond}" in f"_{session_folder}":
+            return cond
+    return None
+
+
+def discover_runs() -> dict[str, dict[str, str]]:
+    """Scan EVAL_DIR folders and build recipe_folder -> {condition: session_id}.
+
+    Recipe = the <recipe> folder name; condition = parsed from the session
+    folder name.  Nothing inside session.json is consulted here, so the
+    discovery is driven purely by the folders that are always present.
+    Recipes are returned in sorted order for stable output.
+    """
+    runs: dict[str, dict[str, str]] = {}
+    for recipe_dir in sorted(p for p in EVAL_DIR.iterdir() if p.is_dir()):
+        for session_dir in sorted(p for p in recipe_dir.iterdir() if p.is_dir()):
+            if not (session_dir / "session.json").exists():
+                continue
+            cond = _condition_from_name(session_dir.name)
+            if cond is None:
+                print(f"  ! skipping {session_dir}: no condition in folder name")
+                continue
+            runs.setdefault(recipe_dir.name, {})[cond] = session_dir.name
+    return dict(sorted(runs.items()))
+
+
+def resolve_recipe(recipe_folder: str, candidates: list[str]) -> str:
+    """Map a recipe folder name to its canonical recipe name.
+
+    The canonical names are the candidate recipes seen in the belief history
+    (e.g. "amatriciana pasta").  A folder like "amatriciana_v2" matches the
+    candidate whose tokens are a superset of the folder's tokens.  If nothing
+    matches, fall back to the cleaned folder name.
+    """
+    folder_tokens = _tokens(recipe_folder) - _GENERIC_TOKENS
+    for cand in candidates:
+        if folder_tokens and folder_tokens <= _tokens(cand):
+            return cand
+    return " ".join(sorted(_tokens(recipe_folder)))
+
+
+# recipe_folder -> {condition: session_id}, discovered from the folders.
+RUNS: dict[str, dict[str, str]] = discover_runs()
 
 # Column order for the CSV / Markdown / console table.
 COLUMNS = [
@@ -103,8 +137,14 @@ UNIFORM_H = math.log2(N_RECIPES)
 # Per-session metric extraction
 # ─────────────────────────────────────────────────────────────────────────
 
-def analyse_session(session_id: str, ground_truth: str) -> dict:
-    """Load one session.json and compute the proposal's metrics for it."""
+def analyse_session(session_id: str, recipe_folder: str) -> dict:
+    """Load one session.json and compute the proposal's metrics for it.
+
+    `recipe_folder` is the evaluation sub-folder name; the canonical recipe
+    (ground truth) is resolved from it against the belief-history candidates,
+    and correctness is `predicted == resolved recipe` (the stored `accuracy`
+    field is ignored because it can be wrong).
+    """
     # Sessions are nested one level deep under EVAL_DIR (per recipe), so
     # locate the session folder by id regardless of which recipe folder
     # it sits in.
@@ -118,6 +158,19 @@ def analyse_session(session_id: str, ground_truth: str) -> dict:
     data = json.loads(session_path.read_text(encoding="utf-8"))
     result = data["result"]
     history = data.get("belief_history", [])
+
+    # Candidate recipe names appearing in the belief history, used to resolve
+    # the folder name to a canonical recipe (e.g. amatriciana_v2 -> amatriciana pasta).
+    candidates: list[str] = []
+    seen: set[str] = set()
+    for row in history:
+        for k in row:
+            if k.startswith("p::"):
+                name = k[len("p::"):]
+                if name not in seen:
+                    seen.add(name)
+                    candidates.append(name)
+    ground_truth = resolve_recipe(recipe_folder, candidates)
 
     # Walk the belief history to find (a) the first window where the true
     # recipe is ranked #1, and (b) its final rank.
@@ -138,6 +191,7 @@ def analyse_session(session_id: str, ground_truth: str) -> dict:
             first_top_window = step
         final_rank = (ordered.index(ground_truth) + 1) if ground_truth in ordered else None
 
+    predicted = result.get("predicted", "?")
     final_entropy = float(result["final_entropy"])
     n_questions = int(result["questions_asked"])
     ig_q = float(result["total_ig_q"] or 0.0)
@@ -145,9 +199,9 @@ def analyse_session(session_id: str, ground_truth: str) -> dict:
 
     return {
         "recipe": ground_truth,
-        "condition": data.get("condition", "?"),
-        "correct": bool(result["accuracy"]),
-        "predicted": result.get("predicted", "?"),
+        "condition": data.get("condition") or _condition_from_name(session_id) or "?",
+        "correct": predicted == ground_truth,
+        "predicted": predicted,
         "final_rank": final_rank,
         "first_top_window": first_top_window,
         "final_entropy": round(final_entropy, 3),

@@ -116,14 +116,20 @@ def per_recipe_h1() -> list[tuple[str, float, float, str]]:
     out = []
     for recipe, conditions in RUNS.items():
         vals = {}
+        label = recipe  # falls back to folder name if no wh/polar session
         for cond in ("wh", "polar"):
             sid = conditions.get(cond)
-            vals[cond] = analyse_session(sid, recipe)["mean_ig_q_per_turn"] if sid else None
+            if sid:
+                r = analyse_session(sid, recipe)
+                vals[cond] = r["mean_ig_q_per_turn"]
+                label = r["recipe"]  # canonical resolved recipe name
+            else:
+                vals[cond] = None
         if vals["wh"] is None or vals["polar"] is None:
             winner = "n/a"
         else:
             winner = "polar" if vals["polar"] > vals["wh"] else "wh"
-        out.append((recipe, vals["wh"], vals["polar"], winner))
+        out.append((label, vals["wh"], vals["polar"], winner))
     return out
 
 

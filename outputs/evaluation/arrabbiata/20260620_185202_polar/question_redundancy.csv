@@ -1,7 +1,0 @@
-window,question,question_form,answer_type,proposition,category,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value
-1,Are you adding cream to the skillet?,polar,no,A cook pours cream into the skillet.,ingredient,0.4163,1.0123,2,-0.3114,0.8608,1.1722,-0.1599
-2,Are you adding onion to the saucepan?,polar,no,A cook sautees onion in the saucepan.,ingredient,0.5452,0.1777,3,0.6813,0.4838,-0.1975,0.3752
-3,Will you stir garlic into the skillet?,polar,yes,A cook stirs garlic into the skillet.,method,1.0223,1.2875,4,-0.2332,0.0844,0.3176,0.9699
-4,Is the next step adding shrimp to the skillet?,polar,no,A cook adds shrimp to the skillet.,sequence,1.1176,-0.8091,5,-0.0407,0.0811,0.1218,-0.9309
-5,Are you adding olives to the skillet?,polar,no,A cook adds olives to the skillet.,ingredient,0.6831,-0.0874,6,0.7712,0.098,-0.6732,0.5858
-6,Are you adding chili flakes to the skillet?,polar,yes,A cook crushes chili flakes into the skillet.,ingredient,0.1966,0.2165,7,-0.2286,-0.2103,0.0183,0.1982
