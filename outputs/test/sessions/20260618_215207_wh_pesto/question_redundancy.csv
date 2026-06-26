@@ -1,0 +1,6 @@
+window,question,category,answer,answer_type,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value,negated_entity
+1,How are you preparing the pancetta?,method,no,off_topic,0.2007,0.0,,,,,0.0,
+2,How are you preparing the skillet?,method,I will toast pine nuts in a dry pan,off_topic,0.2111,0.0,,,,,0.0,
+4,What did you do before adding the pasta?,sequence,A cook spoons store-bought pesto into a mixing bowl.,affirmative,0.2062,0.1694,5,0.2723,0.0485,-0.2238,0.3932,
+5,How are you preparing the sauce?,method,,dont_know,0.1506,0.0,,,,,0.0,
+6,What are you adding next?,ingredient,A cook adds pine nuts to the mixing bowl.,affirmative,0.1703,1.551,,,,,1.551,

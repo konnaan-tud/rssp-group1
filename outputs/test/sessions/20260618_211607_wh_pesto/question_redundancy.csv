@@ -1,0 +1,2 @@
+window,question,category,answer,answer_type,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value,negated_entity
+4,How are you preparing the pasta?,method,A cook folds the pasta into the pesto.,affirmative,0.2062,0.1957,5,-0.1101,0.0485,0.1586,0.0371,

@@ -1,0 +1,5 @@
+window,question,category,answer,answer_type,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value,negated_entity
+1,What's your next step after adding the butter?,sequence,doesn't apply,doesnt_apply,0.2019,0.0,,,,,0.0,
+2,What are you putting in the skillet?,ingredient,A cook puts olive oil.,affirmative,0.3512,0.3409,3,0.1275,0.5375,0.41,-0.0691,
+3,How are you preparing the onion?,method,I will sautee the onion,off_topic,0.104,0.0,,,,,0.0,
+4,What's your next step after adding the tomato sauce?,sequence,A cook pours vodka.,affirmative,0.2202,0.337,5,-0.3996,0.3485,0.7481,-0.4111,

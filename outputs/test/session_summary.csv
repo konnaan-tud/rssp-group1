@@ -1,0 +1,38 @@
+timestamp,ground_truth,predicted,accuracy,predicted_prob,final_entropy,questions_asked,n_recipes,n_windows,total_ig_q,total_unique_value
+2026-06-18T14:44:22,carbonara,carbonara,1,0.4321,2.6557,2,29,9,1.3468,-0.3354
+2026-06-18T14:50:15,carbonara,carbonara,1,0.5941,2.1641,2,29,9,1.2365,0.5054
+2026-06-18T14:55:38,polar,carbonara,carbonara bianca,0,0.4693,1.6752,2,29,9,2.5639,3.3165
+2026-06-18T15:00:01,carbonara,carbonara,1,0.4677,2.5346,2,29,9,1.8738,-0.1228
+2026-06-18T15:13:02,polar,carbonara,carbonara,1,0.5433,1.7129,1,29,9,2.4568,3.1318
+2026-06-18T15:46:05,obs_only,pesto pasta,puttanesca pasta,0,0.1033,4.4524,0,29,5,0.0,0.0
+2026-06-18T15:56:06,pesto pasta,puttanesca pasta,0,0.1033,4.4524,0,29,5,0,0
+2026-06-18T16:04:29,polar,pesto pasta,pesto pasta,1,0.9638,0.2362,4,29,5,4.0462,4.2161
+2026-06-18T16:43:36,polar,carbonara,gricia,0,0.8223,1.0018,3,29,9,1.9403,3.3207
+2026-06-18T17:05:48,obs_only,carbonara,carbonara,1,0.5343,2.3717,0,29,9,0.0,0.0
+2026-06-18T17:11:34,polar,carbonara,carbonara,1,0.6896,1.9678,3,29,9,0.8316,2.3268
+2026-06-18T17:34:20,polar,carbonara,gricia,0,0.7433,1.109,2,29,9,2.1836,3.1533
+2026-06-18T17:55:33,polar,carbonara,cacio e pepe,0,0.9157,0.5411,2,29,9,3.2961,4.0071
+2026-06-18T18:27:12,polar,carbonara,carbonara bianca,0,0.4737,1.6126,4,29,9,2.8255,2.9577
+2026-06-18T18:44:19,polar,carbonara,scrambled carbonara,0,0.2644,3.4159,3,29,9,0.7733,1.1545
+2026-06-18T23:45:42,obs_only,pesto pasta,cacio e uova,0,0.1251,4.5747,0,29,6,0.0,0.0
+2026-06-19T00:01:16,obs_only,amatriciana,amatriciana pasta,0,0.2878,3.6903,0,29,10,0.0,0.0
+2026-06-19T00:11:41,amatriciana,amatriciana pasta,0,0.4358,3.2269,3,29,10,1.5497,2.221
+2026-06-19T00:20:41,polar,amatriciana,amatriciana pasta,0,0.3778,3.5142,5,29,10,-0.2118,0.1603
+2026-06-20T18:22:57,obs_only,arrabbiata pasta,puttanesca pasta,0,0.227,3.5864,0,29,10,0.0,0.0
+2026-06-20T18:45:40,arrabbiata pasta,puttanesca pasta,0,0.239,3.4444,3,29,10,0.699,-0.0251
+2026-06-20T18:59:11,polar,arrabbiata pasta,garlic oil pasta,0,0.8466,1.0103,6,29,10,1.7975,1.0383
+2026-06-20T19:08:48,obs_only,vodka sauce pasta,vodka sauce pasta,1,0.1758,3.7252,0,29,10,0.0,0.0
+2026-06-20T19:16:53,vodka sauce pasta,vodka sauce pasta,1,0.2523,3.7576,2,29,10,0.6779,-0.4802
+2026-06-20T19:29:28,polar,vodka sauce pasta,vodka sauce pasta,1,0.6069,1.3998,6,29,10,3.4103,2.002
+2026-06-20T19:50:09,obs_only,shrimp garlic pasta,shrimp garlic pasta,1,0.3563,3.4141,0,29,9,0.0,0.0
+2026-06-20T19:55:03,shrimp garlic pasta,shrimp garlic pasta,1,0.5785,2.5094,3,29,9,1.4022,0.7432
+2026-06-20T19:58:41,polar,shrimp garlic pasta,shrimp garlic pasta,1,0.9102,0.6521,4,29,9,3.6171,2.4787
+2026-06-20T20:01:01,obs_only,alfredo pasta,alfredo pasta,1,0.3592,3.6595,0,29,9,0.0,0.0
+2026-06-20T20:06:23,alfredo pasta,alfredo pasta,1,0.3313,3.6662,2,29,9,1.6852,-0.5138
+2026-06-20T20:08:26,polar,alfredo pasta,alfredo pasta,1,0.7729,1.0892,4,29,9,3.9061,2.427
+2026-06-20T20:10:58,obs_only,amatriciana pasta,amatriciana pasta,1,0.3548,3.472,0,29,10,0.0,0.0
+2026-06-20T20:15:05,amatriciana pasta,amatriciana pasta,1,0.4299,3.3491,1,29,10,0.2037,0.2557
+2026-06-20T20:18:00,polar,amatriciana pasta,gricia,0,0.3903,3.0889,8,29,10,1.0163,-0.1503
+2026-06-20T20:19:45,obs_only,clam pasta,clam pasta,1,0.1915,3.7471,0,29,10,0.0,0.0
+2026-06-20T20:23:41,clam pasta,clam pasta,1,0.1865,3.7932,2,29,10,0.2375,-0.1788
+2026-06-20T20:26:19,polar,clam pasta,clam pasta,1,0.4825,2.9343,5,29,10,1.6574,1.1508

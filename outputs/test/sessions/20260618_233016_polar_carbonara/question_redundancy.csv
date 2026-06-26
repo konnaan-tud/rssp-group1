@@ -1,0 +1,4 @@
+window,question,question_form,answer_type,proposition,category,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value
+1,Are you adding cream to the skillet?,polar,no,A cook pours cream into the skillet.,ingredient,0.4163,1.0123,2,2.3774,0.9466,-1.4308,2.4431
+6,Is the next step to transfer pasta into the skillet?,polar,yes,A cook transfers pasta into the skillet.,sequence,0.4492,0.4717,7,-0.1654,-0.6035,-0.438,0.9097
+8,Are you adding pecorino to the mixing bowl?,polar,yes,A cook grates pecorino into a mixing bowl.,ingredient,0.1182,-0.0666,9,0.0158,0.0349,0.0191,-0.0857

@@ -1,0 +1,6 @@
+window,question,category,answer,answer_type,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value,negated_entity
+1,What's your next step after adding the butter?,sequence,doesn't apply,doesnt_apply,0.2019,0.0,,,,,0.0,
+2,What are you putting in the skillet?,ingredient,A cook puts olive oil.,affirmative,0.3426,0.3537,3,0.0674,0.4838,0.4164,-0.0627,
+3,What's your next step after adding the chili flakes?,sequence,doesn't apply,doesnt_apply,0.2798,0.0,,,,,0.0,
+4,How are you preparing the garlic?,method,A cook warms the garlic in the skillet.,affirmative,0.1467,0.2428,5,0.5016,0.45,-0.0515,0.2943,
+5,What's your next step after adding the shrimp?,sequence,A cook flips the shrimp.,affirmative,0.4051,0.8057,6,0.4132,0.7073,0.2941,0.5116,

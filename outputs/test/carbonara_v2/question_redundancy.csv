@@ -1,0 +1,4 @@
+window,question,category,answer,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value
+3,Which pasta are you adding next?,ingredient,A cook drops pasta into salted boiling water.,0.6178,0.2321,4,-0.1779,0.5274,0.7053,-0.4732
+4,When do you add the eggs?,sequence,A cook pours the egg mixture over the pasta.,0.3019,0.4275,5,-0.3311,-0.1204,0.2107,0.2168
+8,When do you add the eggs to the pasta?,sequence,A cook transfers pasta into the skillet.,0.124,0.2532,9,0.1155,0.1834,0.0679,0.1853

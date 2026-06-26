@@ -1,0 +1,4 @@
+window,question,category,answer,answer_type,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value,negated_entity
+2,What is the next step in the process?,sequence,A cook grates pecorino into the mixing bowl.,affirmative,0.7739,1.1765,3,0.0353,1.1727,1.1374,0.0391,
+3,How are you preparing the pancetta?,method,A cook cooks pancetta in a skillet.,affirmative,0.4467,0.5345,4,-0.2862,0.4325,0.7187,-0.1842,
+4,How are you preparing the pasta?,method,A cook pours the egg mixture over the pasta.,affirmative,0.1223,0.228,5,-0.1264,-0.0099,0.1165,0.1115,

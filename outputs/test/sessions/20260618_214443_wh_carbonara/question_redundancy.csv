@@ -1,0 +1,5 @@
+window,question,category,answer,answer_type,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value,negated_entity
+1,How are you preparing the pancetta?,method,A cook dices pancetta on a cutting board.,affirmative,0.2007,1.0546,2,1.0407,0.9466,-0.0941,1.1487,
+3,How are you preparing the skillet?,method,A cook stirs the pasta in the skillet.,affirmative,0.102,0.3137,4,-0.1135,0.4325,0.546,-0.2323,
+4,What did you do before adding the pasta?,sequence,A cook cooks pancetta in a skillet.,affirmative,0.1723,0.1119,5,0.0081,-0.0099,-0.018,0.1299,
+7,What did you do before adding the egg mixture?,sequence,,dont_know,0.147,0.0,,,,,0.0,

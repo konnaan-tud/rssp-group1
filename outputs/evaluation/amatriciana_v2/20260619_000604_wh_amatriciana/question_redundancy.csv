@@ -1,0 +1,4 @@
+window,question,category,answer,answer_type,predicted_eig,ig_q,next_obs_window,real_ig_next_obs,shadow_ig_next_obs,redundancy,unique_value,negated_entity
+1,How are you preparing the pancetta?,method,A cook dices the pancetta.,affirmative,0.2007,1.1934,2,1.4529,0.9818,-0.471,1.6644,
+3,How are you preparing the skillet?,method,A cook heats it.,affirmative,0.2982,-0.1442,4,-0.0038,-0.626,-0.6223,0.4781,
+5,What's your next step after adding the chili flakes?,sequence,A cook pours tomato sauce into skillet.,affirmative,0.236,0.5005,6,-0.3096,0.1124,0.422,0.0785,
